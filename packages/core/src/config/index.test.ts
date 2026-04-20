@@ -38,4 +38,25 @@ describe("loadConfig", () => {
     await writeFile(path, JSON.stringify({ dataTypes: ["steps", "bogus"] }));
     await expect(loadConfig(path)).rejects.toBeInstanceOf(ConfigError);
   });
+
+  it("throws ConfigError when driveRootFolder is not a string", async () => {
+    const dir = await tmpDir();
+    const path = join(dir, "config.json");
+    await writeFile(path, JSON.stringify({ driveRootFolder: 42 }));
+    await expect(loadConfig(path)).rejects.toThrow(/driveRootFolder/);
+  });
+
+  it("throws ConfigError when logLevel is unknown", async () => {
+    const dir = await tmpDir();
+    const path = join(dir, "config.json");
+    await writeFile(path, JSON.stringify({ logLevel: "TRACE" }));
+    await expect(loadConfig(path)).rejects.toThrow(/logLevel/);
+  });
+
+  it("throws ConfigError when dataTypes is not an array", async () => {
+    const dir = await tmpDir();
+    const path = join(dir, "config.json");
+    await writeFile(path, JSON.stringify({ dataTypes: "steps" }));
+    await expect(loadConfig(path)).rejects.toThrow(/dataTypes must be an array/);
+  });
 });

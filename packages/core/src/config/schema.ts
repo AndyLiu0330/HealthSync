@@ -8,10 +8,14 @@ export const SUPPORTED_DATA_TYPES = [
 
 export type DataType = (typeof SUPPORTED_DATA_TYPES)[number];
 
+export const VALID_LOG_LEVELS = ["debug", "info", "warn", "error"] as const;
+
+export type LogLevel = (typeof VALID_LOG_LEVELS)[number];
+
 export interface HealthSyncConfig {
   driveRootFolder: string;
   dataTypes: DataType[];
-  logLevel: "debug" | "info" | "warn" | "error";
+  logLevel: LogLevel;
 }
 
 export const DEFAULT_CONFIG: HealthSyncConfig = {
