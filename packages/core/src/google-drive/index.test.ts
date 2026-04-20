@@ -49,4 +49,21 @@ describe("DriveClient", () => {
     });
     expect(id).toBe("file-1");
   });
+
+  it("uploadJSON with overwriteFileId sends update and returns the same id", async () => {
+    const api = nock("https://www.googleapis.com");
+    api
+      .patch("/upload/drive/v3/files/file-1")
+      .query(true)
+      .reply(200, { id: "file-1" });
+
+    const client = new DriveClient(fakeAuth());
+    const id = await client.uploadJSON({
+      parentId: "raw-id",
+      name: "sample.json",
+      body: { foo: 1 },
+      overwriteFileId: "file-1",
+    });
+    expect(id).toBe("file-1");
+  });
 });

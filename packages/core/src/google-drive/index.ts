@@ -56,7 +56,8 @@ export class DriveClient {
         media,
         fields: "id",
       });
-      return res.data.id ?? p.overwriteFileId;
+      if (!res.data.id) throw new NetworkError(`Drive upload: no id for ${p.name}`);
+      return res.data.id;
     }
     const res = await this.drive.files.create({
       requestBody: { name: p.name, parents: [p.parentId] },
@@ -75,7 +76,8 @@ export class DriveClient {
         media,
         fields: "id",
       });
-      return res.data.id ?? p.overwriteFileId;
+      if (!res.data.id) throw new NetworkError(`Drive upload: no id for ${p.name}`);
+      return res.data.id;
     }
     const res = await this.drive.files.create({
       requestBody: { name: p.name, parents: [p.parentId] },
