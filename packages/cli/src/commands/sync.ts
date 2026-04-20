@@ -40,6 +40,16 @@ export function buildSyncCommand(deps: SyncDeps): Command {
         force?: boolean;
         json?: boolean;
       }) => {
+        if (opts.dryRun) {
+          process.stderr.write(
+            "warning: --dry-run is not yet implemented; uploads will still happen\n",
+          );
+        }
+        if (opts.full) {
+          process.stderr.write(
+            "warning: --full is not yet implemented; using default start time\n",
+          );
+        }
         const base = await deps.buildDeps();
         const types = opts.types
           ? opts.types.split(",").map((t) => t.trim()).filter((t): t is DataType =>
