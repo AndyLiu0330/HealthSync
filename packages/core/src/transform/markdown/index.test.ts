@@ -30,6 +30,8 @@ describe("renderDailyNote", () => {
     expect(md).toContain("🫁 SpO2");
     expect(md).toContain("[[2026-04-18]]");
     expect(md).toContain("[[2026-04-20]]");
+    expect(md).toContain("[steps](../../raw/2026/04/2026-04-19_steps.json)");
+    expect(md).toContain("[sleep](../../raw/2026/04/2026-04-19_sleep.json)");
   });
 
   it("omits sections with no data and excludes them from front-matter types", () => {

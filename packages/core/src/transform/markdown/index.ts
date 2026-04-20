@@ -41,7 +41,7 @@ export function renderDailyNote(day: CanonicalDay): string {
   lines.push("");
   lines.push("## 🔗 Links");
   const rawLinks = sections
-    .map((s) => `[[../../raw/${pathParts(day.date)}_${s.key}.json|${s.key}]]`)
+    .map((s) => `[${s.key}](../../raw/${pathParts(day.date)}_${s.key}.json)`)
     .join(" · ");
   lines.push(`- Raw JSON: ${rawLinks}`);
   lines.push(`- Previous: [[${prev}]] · Next: [[${next}]]`);
