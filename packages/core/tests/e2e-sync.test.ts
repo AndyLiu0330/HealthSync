@@ -15,10 +15,10 @@ describe("E2E runSync with mocked Google APIs", () => {
   it("fetches one day, uploads raw JSON + daily MD to Drive", async () => {
     // --- Google Health API
     const hc = nock("https://health.googleapis.com");
-    hc.get("/v1/users/me/steps/read")
+    hc.get("/v4/users/me/dataTypes/steps/dataPoints")
       .query(true)
       .reply(200, {
-        points: [{ date: "2026-04-19", value: 8432, goal: 10000, distanceMeters: 6100 }],
+        dataPoints: [{ steps: { count: "8432" } }],
       });
 
     // --- Google Drive API

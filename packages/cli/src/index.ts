@@ -1,30 +1,32 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
-import { Command } from "commander";
+import { createInterface } from "node:readline/promises";
 import {
+  type DataType,
   DriveClient,
   HealthClient,
   auth,
-  type DataType,
   loadConfig,
   loadSyncState,
   runSync,
   updateLastSync,
   version,
 } from "@healthsync/core";
+import { Command } from "commander";
 import { buildAuthCommand } from "./commands/auth.js";
 import { buildConfigCommand } from "./commands/config.js";
 import { buildListCommand } from "./commands/list.js";
 import { buildSyncCommand } from "./commands/sync.js";
+import { loadEnvFile } from "./env.js";
 import { configPath, statePath, tokensPath } from "./paths.js";
+
+loadEnvFile();
 
 function getCredentials(): { clientId: string; clientSecret: string } {
   const clientId = process.env.HEALTHSYNC_CLIENT_ID;
   const clientSecret = process.env.HEALTHSYNC_CLIENT_SECRET;
   if (!clientId || !clientSecret) {
-    console.error(
-      "HEALTHSYNC_CLIENT_ID and HEALTHSYNC_CLIENT_SECRET must be set (see README).",
-    );
+    console.error("HEALTHSYNC_CLIENT_ID and HEALTHSYNC_CLIENT_SECRET must be set (see README).");
     process.exit(2);
   }
   return { clientId, clientSecret };
@@ -59,6 +61,15 @@ function openBrowser(url: string): Promise<void> {
     }
     resolve();
   });
+}
+
+async function readLine(prompt: string): Promise<string> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    return await rl.question(prompt);
+  } finally {
+    rl.close();
+  }
 }
 
 async function buildSyncDeps(): Promise<{
@@ -111,6 +122,7 @@ async function main(): Promise<void> {
       paths: { tokens: tokensPath() },
       credentials,
       writeLine: (s) => console.log(s),
+      readLine,
       openBrowser: (url) => openBrowser(url),
     }),
   );
