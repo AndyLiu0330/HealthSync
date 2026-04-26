@@ -18,6 +18,7 @@ export interface AuthOptions {
   clientSecret: string;
   tokensPath: string;
   scopes?: string[];
+  loopbackPort?: number;
   openBrowser?: (url: string) => Promise<unknown>;
 }
 
@@ -37,7 +38,10 @@ const DEFAULT_MANUAL_REDIRECT_URI = "http://127.0.0.1:53682/callback";
 
 export async function login(opts: AuthOptions): Promise<StoredTokens> {
   const state = randomBytes(16).toString("hex");
-  const capture = captureAuthCode({ state });
+  const capture = captureAuthCode({
+    state,
+    ...(opts.loopbackPort !== undefined ? { port: opts.loopbackPort } : {}),
+  });
   const { port, promise } = await capture.ready;
   const redirectUri = `http://127.0.0.1:${port}/callback`;
 

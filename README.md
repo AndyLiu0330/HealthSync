@@ -100,13 +100,29 @@ The `spo2` shortcut reads Google Health's `daily-oxygen-saturation` data type.
 
 ### Remote server authorisation
 
-Use manual login when the CLI runs on a remote server and your browser runs on your laptop:
+When the CLI runs on a remote server and your browser runs on your laptop, use an SSH tunnel so Google's loopback redirect reaches the remote CLI listener.
+
+From your laptop, connect to the server with port forwarding:
+
+```bash
+ssh -L 53682:127.0.0.1:53682 user@remote-server
+```
+
+In that SSH session on the remote server, run:
+
+```bash
+node packages/cli/dist/index.js auth login --no-open --port 53682
+```
+
+The CLI prints a Google authorisation URL. Open it in your local browser and sign in. Google redirects to `http://127.0.0.1:53682/callback?...` on your laptop, and SSH forwards that request to the remote CLI.
+
+Manual copy/paste login is still available as a fallback:
 
 ```bash
 node packages/cli/dist/index.js auth login --manual
 ```
 
-The CLI prints a Google authorisation URL. Open it in your local browser and sign in. Google will redirect to a `http://127.0.0.1:53682/callback?...` URL; your browser may show a connection error because that address is local to your laptop, not the remote server. Copy the full browser URL, including `state` and `code`, paste it back into the CLI prompt, and HealthSync will exchange it for tokens on the remote server.
+It prints a Google authorisation URL, then asks you to paste the full redirect URL after consent.
 
 ### Tokens on disk
 

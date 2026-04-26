@@ -16,15 +16,26 @@ export function buildAuthCommand(deps: AuthCommandDeps): Command {
     .command("login")
     .description("Authorise with Google and store tokens")
     .option("--manual", "print the auth URL and ask for the pasted redirect URL")
+    .option("--no-open", "print the auth URL instead of opening a browser")
+    .option("--port <port>", "fixed loopback callback port, useful with SSH tunnels", parsePort)
     .option("--json", "machine-readable output")
-    .action(async (opts: { json?: boolean; manual?: boolean }) => {
-      const tokens = opts.manual ? await manualLogin(deps, opts.json) : await loopbackLogin(deps);
-      if (opts.json) {
-        deps.writeLine(JSON.stringify({ authenticated: true, expiresAt: tokens.expires_at }));
-      } else {
-        deps.writeLine(`Authorised. Token expires at ${tokens.expires_at}.`);
-      }
-    });
+    .action(
+      async (opts: {
+        json?: boolean;
+        manual?: boolean;
+        open?: boolean;
+        port?: number;
+      }) => {
+        const tokens = opts.manual
+          ? await manualLogin(deps, opts.json)
+          : await loopbackLogin(deps, opts);
+        if (opts.json) {
+          deps.writeLine(JSON.stringify({ authenticated: true, expiresAt: tokens.expires_at }));
+        } else {
+          deps.writeLine(`Authorised. Token expires at ${tokens.expires_at}.`);
+        }
+      },
+    );
 
   cmd
     .command("status")
@@ -50,12 +61,26 @@ export function buildAuthCommand(deps: AuthCommandDeps): Command {
   return cmd;
 }
 
-async function loopbackLogin(deps: AuthCommandDeps) {
+async function loopbackLogin(
+  deps: AuthCommandDeps,
+  opts: { open?: boolean; port?: number; json?: boolean },
+) {
   return auth.login({
     clientId: deps.credentials.clientId,
     clientSecret: deps.credentials.clientSecret,
     tokensPath: deps.paths.tokens,
-    openBrowser: deps.openBrowser,
+    ...(opts.port !== undefined ? { loopbackPort: opts.port } : {}),
+    openBrowser:
+      opts.open === false
+        ? async (url) => {
+            if (!opts.json) {
+              deps.writeLine("Open this URL in your local browser:");
+              deps.writeLine(url);
+            } else {
+              deps.writeLine(JSON.stringify({ authUrl: url }));
+            }
+          }
+        : deps.openBrowser,
   });
 }
 
@@ -82,4 +107,12 @@ async function manualLogin(deps: AuthCommandDeps, json = false) {
   }
   const redirectUrl = await deps.readLine("Paste the full redirect URL here: ");
   return session.complete(redirectUrl);
+}
+
+function parsePort(value: string): number {
+  const port = Number(value);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error("--port must be an integer from 1 to 65535");
+  }
+  return port;
 }
