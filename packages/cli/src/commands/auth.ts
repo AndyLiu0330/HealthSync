@@ -12,30 +12,7 @@ export interface AuthCommandDeps {
 export function buildAuthCommand(deps: AuthCommandDeps): Command {
   const cmd = new Command("auth").description("OAuth authorisation");
 
-  cmd
-    .command("login")
-    .description("Authorise with Google and store tokens")
-    .option("--manual", "print the auth URL and ask for the pasted redirect URL")
-    .option("--no-open", "print the auth URL instead of opening a browser")
-    .option("--port <port>", "fixed loopback callback port, useful with SSH tunnels", parsePort)
-    .option("--json", "machine-readable output")
-    .action(
-      async (opts: {
-        json?: boolean;
-        manual?: boolean;
-        open?: boolean;
-        port?: number;
-      }) => {
-        const tokens = opts.manual
-          ? await manualLogin(deps, opts.json)
-          : await loopbackLogin(deps, opts);
-        if (opts.json) {
-          deps.writeLine(JSON.stringify({ authenticated: true, expiresAt: tokens.expires_at }));
-        } else {
-          deps.writeLine(`Authorised. Token expires at ${tokens.expires_at}.`);
-        }
-      },
-    );
+  cmd.addCommand(buildLoginCommand("login", deps));
 
   cmd
     .command("status")
@@ -59,6 +36,36 @@ export function buildAuthCommand(deps: AuthCommandDeps): Command {
     });
 
   return cmd;
+}
+
+export function buildConnectCommand(deps: AuthCommandDeps): Command {
+  return buildLoginCommand("connect", deps).description("Connect HealthSync to Google");
+}
+
+function buildLoginCommand(name: string, deps: AuthCommandDeps): Command {
+  return new Command(name)
+    .description("Authorise with Google and store tokens")
+    .option("--manual", "print the auth URL and ask for the pasted redirect URL")
+    .option("--no-open", "print the auth URL instead of opening a browser")
+    .option("--port <port>", "fixed loopback callback port, useful with SSH tunnels", parsePort)
+    .option("--json", "machine-readable output")
+    .action(
+      async (opts: {
+        json?: boolean;
+        manual?: boolean;
+        open?: boolean;
+        port?: number;
+      }) => {
+        const tokens = opts.manual
+          ? await manualLogin(deps, opts.json)
+          : await loopbackLogin(deps, opts);
+        if (opts.json) {
+          deps.writeLine(JSON.stringify({ authenticated: true, expiresAt: tokens.expires_at }));
+        } else {
+          deps.writeLine(`Authorised. Token expires at ${tokens.expires_at}.`);
+        }
+      },
+    );
 }
 
 async function loopbackLogin(

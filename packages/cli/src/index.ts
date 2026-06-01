@@ -13,7 +13,7 @@ import {
   version,
 } from "@healthsync/core";
 import { Command } from "commander";
-import { buildAuthCommand } from "./commands/auth.js";
+import { buildAuthCommand, buildConnectCommand } from "./commands/auth.js";
 import { buildConfigCommand } from "./commands/config.js";
 import { buildListCommand } from "./commands/list.js";
 import { buildSyncCommand } from "./commands/sync.js";
@@ -134,6 +134,16 @@ async function main(): Promise<void> {
 
   program.addCommand(
     buildAuthCommand({
+      paths: { tokens: tokensPath() },
+      credentials,
+      writeLine: (s) => console.log(s),
+      readLine,
+      openBrowser: (url) => openBrowser(url),
+    }),
+  );
+
+  program.addCommand(
+    buildConnectCommand({
       paths: { tokens: tokensPath() },
       credentials,
       writeLine: (s) => console.log(s),

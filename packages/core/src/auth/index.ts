@@ -133,7 +133,7 @@ export async function getAuthenticatedClient(
   opts: Omit<AuthOptions, "openBrowser">,
 ): Promise<Auth.OAuth2Client> {
   const tokens = await loadTokens(opts.tokensPath);
-  if (!tokens) throw new AuthError("no stored tokens — run `healthsync auth login` first");
+  if (!tokens) throw new AuthError("no stored tokens — run `healthsync connect` first");
 
   const oauth2 = new google.auth.OAuth2(opts.clientId, opts.clientSecret);
   oauth2.setCredentials({
@@ -160,7 +160,7 @@ export async function getScopedAccessToken(
   opts: Omit<AuthOptions, "openBrowser" | "loopbackPort">,
 ): Promise<ScopedAccessToken> {
   const tokens = await loadTokens(opts.tokensPath);
-  if (!tokens) throw new AuthError("no stored tokens — run `healthsync auth login` first");
+  if (!tokens) throw new AuthError("no stored tokens — run `healthsync connect` first");
 
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
