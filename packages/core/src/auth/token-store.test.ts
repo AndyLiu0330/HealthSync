@@ -2,7 +2,7 @@ import { mkdtemp, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { loadTokens, saveTokens, type StoredTokens } from "./token-store.js";
+import { type StoredTokens, loadTokens, saveTokens } from "./token-store.js";
 
 async function tmpPath() {
   const dir = await mkdtemp(join(tmpdir(), "healthsync-tok-"));

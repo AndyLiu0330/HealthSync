@@ -1,13 +1,13 @@
-import { Command } from "commander";
 import {
   type DataType,
   type DrivePort,
   type HealthPort,
   type RunSyncParams,
   type RunSyncResult,
-  type StatePort,
   SUPPORTED_DATA_TYPES,
+  type StatePort,
 } from "@healthsync/core";
+import { Command } from "commander";
 
 export interface SyncDeps {
   buildDeps: () => Promise<{
@@ -52,9 +52,10 @@ export function buildSyncCommand(deps: SyncDeps): Command {
         }
         const base = await deps.buildDeps();
         const types = opts.types
-          ? opts.types.split(",").map((t) => t.trim()).filter((t): t is DataType =>
-              (SUPPORTED_DATA_TYPES as readonly string[]).includes(t),
-            )
+          ? opts.types
+              .split(",")
+              .map((t) => t.trim())
+              .filter((t): t is DataType => (SUPPORTED_DATA_TYPES as readonly string[]).includes(t))
           : base.types;
 
         const params: RunSyncParams = {

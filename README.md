@@ -18,20 +18,29 @@ CLI that syncs Pixel Watch health data from the [Google Health API](https://deve
 3. Configure the OAuth consent screen:
    - User Type: **External**
    - Add yourself as a Test User
-   - Add scopes for the Health data types you want plus `https://www.googleapis.com/auth/drive.file`
+   - Add the readonly Health scopes needed by the default data types:
+     - `https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly`
+     - `https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly`
+     - `https://www.googleapis.com/auth/googlehealth.sleep.readonly`
+   - Add `https://www.googleapis.com/auth/drive.file`
 4. Credentials -> Create OAuth client ID -> Application type: **Desktop app**.
-5. Download the client JSON. Export the two values into your shell before running any command other than `--help`:
+5. Download the client JSON. Copy `.env.example` to `.env`, then paste the two values:
 
 ```bash
-export HEALTHSYNC_CLIENT_ID=<client_id>
-export HEALTHSYNC_CLIENT_SECRET=<client_secret>
+cp .env.example .env
 ```
 
-On Windows (PowerShell):
+```bash
+HEALTHSYNC_CLIENT_ID=<client_id>
+HEALTHSYNC_CLIENT_SECRET=<client_secret>
+```
+
+The CLI automatically loads `.env` from the repository root. Shell environment variables still win if both are set.
+
+On Windows (PowerShell), create the same `.env` file manually or with:
 
 ```powershell
-$env:HEALTHSYNC_CLIENT_ID = "<client_id>"
-$env:HEALTHSYNC_CLIENT_SECRET = "<client_secret>"
+Copy-Item .env.example .env
 ```
 
 > **Launch timing.** Google officially recommends waiting until **late May 2026** to **publicly launch** integrations against the Google Health API (to align with the Fitbit account deprecation). Development and personal use are fine today - that's what this MVP targets.
@@ -52,6 +61,9 @@ All commands are invoked via the compiled CLI entry point:
 ```bash
 # First-time authorisation (opens browser, captures localhost callback)
 node packages/cli/dist/index.js auth login
+
+# First-time authorisation on a remote/headless server
+node packages/cli/dist/index.js auth login --manual
 
 # Check auth state
 node packages/cli/dist/index.js auth status
@@ -84,6 +96,33 @@ node packages/cli/dist/index.js config show --json
 ```
 
 Supported data types: `steps`, `heart-rate`, `sleep`, `active-zone-minutes`, `spo2`.
+The `spo2` shortcut reads Google Health's `daily-oxygen-saturation` data type.
+
+### Remote server authorisation
+
+When the CLI runs on a remote server and your browser runs on your laptop, use an SSH tunnel so Google's loopback redirect reaches the remote CLI listener.
+
+From your laptop, connect to the server with port forwarding:
+
+```bash
+ssh -L 53682:127.0.0.1:53682 user@remote-server
+```
+
+In that SSH session on the remote server, run:
+
+```bash
+node packages/cli/dist/index.js auth login --no-open --port 53682
+```
+
+The CLI prints a Google authorisation URL. Open it in your local browser and sign in. Google redirects to `http://127.0.0.1:53682/callback?...` on your laptop, and SSH forwards that request to the remote CLI.
+
+Manual copy/paste login is still available as a fallback:
+
+```bash
+node packages/cli/dist/index.js auth login --manual
+```
+
+It prints a Google authorisation URL, then asks you to paste the full redirect URL after consent.
 
 ### Tokens on disk
 
@@ -146,7 +185,7 @@ This is an MVP. The following are known gaps that users should be aware of:
 - **`--full` is currently a no-op.** The flag is accepted (and the CLI warns to stderr) but the sync orchestrator does not yet re-fetch past successful days; behaviour matches the default incremental sync. Tracked for a follow-up.
 - **`--dry-run` is currently a no-op.** Same situation: the flag is accepted and warned, but the sync still uploads. Don't rely on it to preview a run yet.
 - **Windows token file ACLs.** The `tokens.json` file is written with mode `0600` on Unix, but that bit is ignored on Windows - the file inherits NTFS ACLs from its parent directory. Ensure `%APPDATA%\healthsync` is user-private (it is by default, but worth checking if you've customised `%APPDATA%`).
-- **Google Health API endpoint shape is assumed.** The code posts to `https://health.googleapis.com/v1/users/me/{type}/read` and has been verified only against mocks, not the live Google Health API. The exact path, payload shape, and scope strings may need small adjustments on your first real run. If you hit a 404 or "invalid scope" error, check `packages/core/src/google-health/` and update accordingly - then open an issue or PR.
+- **Google Health API is still pre-launch.** The code targets the official v4 `users/me/dataTypes/{type}/dataPoints` list endpoint and current readonly Google Health scopes, verified against official docs and mocks. Google notes that breaking changes may still occur before the end of May 2026, so a first real run may still expose small API-shape changes.
 - **Public launch timing.** See the note in *Google Cloud project setup* above - Google recommends waiting until late May 2026 before publishing an integration.
 
 ## Architecture

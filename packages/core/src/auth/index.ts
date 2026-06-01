@@ -3,10 +3,12 @@ import { type Auth, google } from "googleapis";
 import openBrowser from "open";
 import { AuthError } from "../errors/index.js";
 import { captureAuthCode } from "./loopback.js";
-import { loadTokens, saveTokens, type StoredTokens } from "./token-store.js";
+import { type StoredTokens, loadTokens, saveTokens } from "./token-store.js";
 
 export const GOOGLE_HEALTH_SCOPES = [
-  "https://www.googleapis.com/auth/health.read",
+  "https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly",
+  "https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly",
+  "https://www.googleapis.com/auth/googlehealth.sleep.readonly",
 ];
 export const DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive.file"];
 export const ALL_SCOPES = [...GOOGLE_HEALTH_SCOPES, ...DRIVE_SCOPES];
@@ -16,28 +18,85 @@ export interface AuthOptions {
   clientSecret: string;
   tokensPath: string;
   scopes?: string[];
+  loopbackPort?: number;
   openBrowser?: (url: string) => Promise<unknown>;
 }
 
+export interface ManualLoginOptions extends Omit<AuthOptions, "openBrowser"> {
+  redirectUri?: string;
+  state?: string;
+}
+
+export interface ManualLoginSession {
+  authUrl: string;
+  redirectUri: string;
+  state: string;
+  complete(redirectUrl: string): Promise<StoredTokens>;
+}
+
+export interface ScopedAccessToken {
+  token: string;
+  expiresAt: string;
+  scope: string;
+}
+
+const DEFAULT_MANUAL_REDIRECT_URI = "http://127.0.0.1:53682/callback";
+
 export async function login(opts: AuthOptions): Promise<StoredTokens> {
   const state = randomBytes(16).toString("hex");
-  const capture = captureAuthCode({ state });
+  const capture = captureAuthCode({
+    state,
+    ...(opts.loopbackPort !== undefined ? { port: opts.loopbackPort } : {}),
+  });
   const { port, promise } = await capture.ready;
   const redirectUri = `http://127.0.0.1:${port}/callback`;
 
   const oauth2 = new google.auth.OAuth2(opts.clientId, opts.clientSecret, redirectUri);
-  const authUrl = oauth2.generateAuthUrl({
-    access_type: "offline",
-    prompt: "consent",
-    scope: opts.scopes ?? ALL_SCOPES,
-    state,
-  });
+  const scopes = opts.scopes ?? ALL_SCOPES;
+  const authUrl = generateAuthUrl(oauth2, scopes, state);
 
   const open = opts.openBrowser ?? (async (url: string) => openBrowser(url));
   await open(authUrl);
 
   const code = await promise;
-  const { tokens } = await oauth2.getToken(code);
+  return exchangeCode({ oauth2, code, tokensPath: opts.tokensPath, scopes });
+}
+
+export function createManualLoginSession(opts: ManualLoginOptions): ManualLoginSession {
+  const state = opts.state ?? randomBytes(16).toString("hex");
+  const redirectUri = opts.redirectUri ?? DEFAULT_MANUAL_REDIRECT_URI;
+  const scopes = opts.scopes ?? ALL_SCOPES;
+  const oauth2 = new google.auth.OAuth2(opts.clientId, opts.clientSecret, redirectUri);
+  return {
+    authUrl: generateAuthUrl(oauth2, scopes, state),
+    redirectUri,
+    state,
+    complete: async (redirectUrl: string) =>
+      exchangeCode({
+        oauth2,
+        code: parseManualRedirectUrl(redirectUrl, state),
+        tokensPath: opts.tokensPath,
+        scopes,
+      }),
+  };
+}
+
+function generateAuthUrl(oauth2: Auth.OAuth2Client, scopes: string[], state: string): string {
+  return oauth2.generateAuthUrl({
+    access_type: "offline",
+    prompt: "consent",
+    scope: scopes,
+    state,
+  });
+}
+
+async function exchangeCode(opts: {
+  oauth2: Auth.OAuth2Client;
+  code: string;
+  tokensPath: string;
+  scopes: string[];
+}): Promise<StoredTokens> {
+  const { tokens } = await opts.oauth2.getToken(opts.code);
   if (!tokens.access_token || !tokens.refresh_token || !tokens.expiry_date) {
     throw new AuthError("incomplete token response from Google");
   }
@@ -45,10 +104,29 @@ export async function login(opts: AuthOptions): Promise<StoredTokens> {
     access_token: tokens.access_token,
     refresh_token: tokens.refresh_token,
     expires_at: new Date(tokens.expiry_date).toISOString(),
-    scope: String(tokens.scope ?? (opts.scopes ?? ALL_SCOPES).join(" ")),
+    scope: String(tokens.scope ?? opts.scopes.join(" ")),
   };
   await saveTokens(opts.tokensPath, stored);
   return stored;
+}
+
+function parseManualRedirectUrl(redirectUrl: string, expectedState: string): string {
+  let url: URL;
+  try {
+    url = new URL(redirectUrl.trim());
+  } catch {
+    throw new AuthError("invalid OAuth redirect URL");
+  }
+
+  const error = url.searchParams.get("error");
+  if (error) throw new AuthError(`OAuth authorization failed: ${error}`);
+
+  const state = url.searchParams.get("state");
+  if (state !== expectedState) throw new AuthError("OAuth state mismatch — possible CSRF");
+
+  const code = url.searchParams.get("code");
+  if (!code) throw new AuthError("OAuth redirect URL missing code");
+  return code;
 }
 
 export async function getAuthenticatedClient(
@@ -76,6 +154,44 @@ export async function getAuthenticatedClient(
   });
 
   return oauth2;
+}
+
+export async function getScopedAccessToken(
+  opts: Omit<AuthOptions, "openBrowser" | "loopbackPort">,
+): Promise<ScopedAccessToken> {
+  const tokens = await loadTokens(opts.tokensPath);
+  if (!tokens) throw new AuthError("no stored tokens — run `healthsync auth login` first");
+
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: opts.clientId,
+      client_secret: opts.clientSecret,
+      refresh_token: tokens.refresh_token,
+      grant_type: "refresh_token",
+      scope: (opts.scopes ?? ALL_SCOPES).join(" "),
+    }),
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    access_token?: string;
+    expires_in?: number;
+    scope?: string;
+    error?: string;
+    error_description?: string;
+  };
+  if (!res.ok || !data.access_token || !data.expires_in) {
+    throw new AuthError(
+      data.error_description ??
+        data.error ??
+        `failed to refresh scoped access token (${res.status})`,
+    );
+  }
+  return {
+    token: data.access_token,
+    expiresAt: new Date(Date.now() + data.expires_in * 1000).toISOString(),
+    scope: data.scope ?? (opts.scopes ?? ALL_SCOPES).join(" "),
+  };
 }
 
 export async function authStatus(opts: { tokensPath: string }): Promise<

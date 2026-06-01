@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import nock from "nock";
 import { google } from "googleapis";
+import nock from "nock";
+import { beforeEach, describe, expect, it } from "vitest";
 import { DriveClient } from "./index.js";
 
 function fakeAuth() {
@@ -52,10 +52,7 @@ describe("DriveClient", () => {
 
   it("uploadJSON with overwriteFileId sends update and returns the same id", async () => {
     const api = nock("https://www.googleapis.com");
-    api
-      .patch("/upload/drive/v3/files/file-1")
-      .query(true)
-      .reply(200, { id: "file-1" });
+    api.patch("/upload/drive/v3/files/file-1").query(true).reply(200, { id: "file-1" });
 
     const client = new DriveClient(fakeAuth());
     const id = await client.uploadJSON({

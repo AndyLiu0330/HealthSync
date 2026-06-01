@@ -1,5 +1,5 @@
-import { Command } from "commander";
 import type { DrivePort } from "@healthsync/core";
+import { Command } from "commander";
 
 export interface ListDeps {
   buildDrive: () => Promise<{ drive: DrivePort; driveRoot: string }>;

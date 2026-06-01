@@ -1,5 +1,5 @@
-import { Command } from "commander";
 import type { HealthSyncConfig } from "@healthsync/core";
+import { Command } from "commander";
 
 export interface ConfigDeps {
   loadConfig: () => Promise<HealthSyncConfig>;

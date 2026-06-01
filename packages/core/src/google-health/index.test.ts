@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import nock from "nock";
 import { google } from "googleapis";
+import nock from "nock";
+import { beforeEach, describe, expect, it } from "vitest";
 import { HealthClient } from "./index.js";
 
 function fakeAuth() {
@@ -12,12 +12,27 @@ function fakeAuth() {
 describe("HealthClient.fetch", () => {
   beforeEach(() => nock.cleanAll());
 
-  it("returns points for a given range", async () => {
+  it("lists v4 data points for a given range and follows pagination", async () => {
     const api = nock("https://health.googleapis.com");
     api
-      .get("/v1/users/me/steps/read")
-      .query(true)
-      .reply(200, { points: [{ date: "2026-04-19", value: 8432 }] });
+      .get("/v4/users/me/dataTypes/steps/dataPoints")
+      .query((q) => {
+        expect(q.pageSize).toBe("10000");
+        expect(q.filter).toBe(
+          'steps.interval.start_time >= "2026-04-19T00:00:00.000Z" AND steps.interval.start_time < "2026-04-20T00:00:00.000Z"',
+        );
+        return true;
+      })
+      .reply(200, {
+        dataPoints: [{ steps: { count: "6000" } }],
+        nextPageToken: "next",
+      });
+    api
+      .get("/v4/users/me/dataTypes/steps/dataPoints")
+      .query((q) => q.pageToken === "next")
+      .reply(200, {
+        dataPoints: [{ steps: { count: "2432" } }],
+      });
 
     const client = new HealthClient(fakeAuth());
     const result = await client.fetch({
@@ -26,14 +41,22 @@ describe("HealthClient.fetch", () => {
       endTime: "2026-04-20T00:00:00.000Z",
     });
     expect(result.type).toBe("steps");
-    expect(result.points).toHaveLength(1);
-    expect(result.points[0]).toEqual({ date: "2026-04-19", value: 8432 });
+    expect(result.points).toEqual([{ steps: { count: "6000" } }, { steps: { count: "2432" } }]);
   });
 
   it("retries on 429 with Retry-After honored then succeeds", async () => {
     const api = nock("https://health.googleapis.com");
-    api.get("/v1/users/me/sleep/read").query(true).reply(429, {}, { "Retry-After": "0" });
-    api.get("/v1/users/me/sleep/read").query(true).reply(200, { points: [] });
+    api
+      .get("/v4/users/me/dataTypes/sleep/dataPoints")
+      .query((q) => {
+        expect(q.pageSize).toBe("25");
+        expect(q.filter).toBe(
+          'sleep.interval.end_time >= "2026-04-19T00:00:00.000Z" AND sleep.interval.end_time < "2026-04-20T00:00:00.000Z"',
+        );
+        return true;
+      })
+      .reply(429, {}, { "Retry-After": "0" });
+    api.get("/v4/users/me/dataTypes/sleep/dataPoints").query(true).reply(200, { dataPoints: [] });
 
     const client = new HealthClient(fakeAuth(), { maxRetries: 3, baseDelayMs: 1 });
     const result = await client.fetch({
@@ -46,7 +69,16 @@ describe("HealthClient.fetch", () => {
 
   it("throws NetworkError after exhausting retries", async () => {
     const api = nock("https://health.googleapis.com");
-    api.get("/v1/users/me/spo2/read").query(true).times(4).reply(500, {});
+    api
+      .get("/v4/users/me/dataTypes/daily-oxygen-saturation/dataPoints")
+      .query((q) => {
+        expect(q.filter).toBe(
+          'daily_oxygen_saturation.date >= "2026-04-19" AND daily_oxygen_saturation.date < "2026-04-20"',
+        );
+        return true;
+      })
+      .times(4)
+      .reply(500, {});
 
     const client = new HealthClient(fakeAuth(), { maxRetries: 3, baseDelayMs: 1 });
     await expect(

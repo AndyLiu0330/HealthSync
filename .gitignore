@@ -3,6 +3,7 @@ dist/
 coverage/
 *.log
 .DS_Store
+.env
 # Local runtime state
 .healthsync-local/
 # Editor

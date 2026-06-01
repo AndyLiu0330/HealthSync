@@ -1,30 +1,32 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
-import { Command } from "commander";
+import { createInterface } from "node:readline/promises";
 import {
+  type DataType,
   DriveClient,
   HealthClient,
   auth,
-  type DataType,
   loadConfig,
   loadSyncState,
   runSync,
   updateLastSync,
   version,
 } from "@healthsync/core";
+import { Command } from "commander";
 import { buildAuthCommand } from "./commands/auth.js";
 import { buildConfigCommand } from "./commands/config.js";
 import { buildListCommand } from "./commands/list.js";
 import { buildSyncCommand } from "./commands/sync.js";
+import { loadEnvFile } from "./env.js";
 import { configPath, statePath, tokensPath } from "./paths.js";
+
+loadEnvFile();
 
 function getCredentials(): { clientId: string; clientSecret: string } {
   const clientId = process.env.HEALTHSYNC_CLIENT_ID;
   const clientSecret = process.env.HEALTHSYNC_CLIENT_SECRET;
   if (!clientId || !clientSecret) {
-    console.error(
-      "HEALTHSYNC_CLIENT_ID and HEALTHSYNC_CLIENT_SECRET must be set (see README).",
-    );
+    console.error("HEALTHSYNC_CLIENT_ID and HEALTHSYNC_CLIENT_SECRET must be set (see README).");
     process.exit(2);
   }
   return { clientId, clientSecret };
@@ -61,6 +63,15 @@ function openBrowser(url: string): Promise<void> {
   });
 }
 
+async function readLine(prompt: string): Promise<string> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    return await rl.question(prompt);
+  } finally {
+    rl.close();
+  }
+}
+
 async function buildSyncDeps(): Promise<{
   health: HealthClient;
   drive: DriveClient;
@@ -73,14 +84,29 @@ async function buildSyncDeps(): Promise<{
 }> {
   const cfg = await loadConfig(configPath());
   const credentials = getCredentials();
-  const client = await auth.getAuthenticatedClient({
+  const driveClient = await auth.getAuthenticatedClient({
     clientId: credentials.clientId,
     clientSecret: credentials.clientSecret,
     tokensPath: tokensPath(),
   });
+  let healthToken: Awaited<ReturnType<typeof auth.getScopedAccessToken>> | undefined;
+  const healthAuth = {
+    async getAccessToken(): Promise<{ token?: string | null }> {
+      if (healthToken && Date.parse(healthToken.expiresAt) - Date.now() > 60_000) {
+        return { token: healthToken.token };
+      }
+      healthToken = await auth.getScopedAccessToken({
+        clientId: credentials.clientId,
+        clientSecret: credentials.clientSecret,
+        tokensPath: tokensPath(),
+        scopes: auth.GOOGLE_HEALTH_SCOPES,
+      });
+      return { token: healthToken.token };
+    },
+  };
   return {
-    health: new HealthClient(client),
-    drive: new DriveClient(client),
+    health: new HealthClient(healthAuth),
+    drive: new DriveClient(driveClient),
     state: {
       async get() {
         return loadSyncState(statePath());
@@ -111,6 +137,7 @@ async function main(): Promise<void> {
       paths: { tokens: tokensPath() },
       credentials,
       writeLine: (s) => console.log(s),
+      readLine,
       openBrowser: (url) => openBrowser(url),
     }),
   );

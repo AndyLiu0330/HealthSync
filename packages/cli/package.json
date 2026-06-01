@@ -3,7 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "bin": { "healthsync": "./dist/index.js" },
+  "bin": {
+    "healthsync": "./dist/index.js"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -12,7 +14,8 @@
   },
   "dependencies": {
     "@healthsync/core": "workspace:*",
-    "commander": "^12.1.0"
+    "commander": "^12.1.0",
+    "dotenv": "^17.4.2"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

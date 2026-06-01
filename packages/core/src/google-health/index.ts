@@ -1,7 +1,10 @@
-import type { Auth } from "googleapis";
 import type { DataType } from "../config/index.js";
 import { NetworkError, RateLimitError } from "../errors/index.js";
 import type { DataTypeResult, RawDataPoint } from "./types.js";
+
+export interface AccessTokenProvider {
+  getAccessToken(): Promise<{ token?: string | null }>;
+}
 
 export interface HealthClientOptions {
   maxRetries?: number;
@@ -15,7 +18,52 @@ export interface FetchParams {
   endTime: string;
 }
 
-const DEFAULT_BASE = "https://health.googleapis.com/v1";
+const DEFAULT_BASE = "https://health.googleapis.com/v4";
+
+interface TypeQuery {
+  dataType: string;
+  filter: string;
+  pageSize: number;
+}
+
+const TYPE_QUERIES: Record<
+  DataType,
+  Omit<TypeQuery, "filter"> & {
+    filterField: string;
+    kind: "daily" | "interval" | "sample" | "sleep";
+  }
+> = {
+  "active-zone-minutes": {
+    dataType: "active-zone-minutes",
+    filterField: "active_zone_minutes",
+    kind: "interval",
+    pageSize: 10000,
+  },
+  "heart-rate": {
+    dataType: "heart-rate",
+    filterField: "heart_rate",
+    kind: "sample",
+    pageSize: 10000,
+  },
+  sleep: {
+    dataType: "sleep",
+    filterField: "sleep",
+    kind: "sleep",
+    pageSize: 25,
+  },
+  spo2: {
+    dataType: "daily-oxygen-saturation",
+    filterField: "daily_oxygen_saturation",
+    kind: "daily",
+    pageSize: 10000,
+  },
+  steps: {
+    dataType: "steps",
+    filterField: "steps",
+    kind: "interval",
+    pageSize: 10000,
+  },
+};
 
 export class HealthClient {
   private readonly maxRetries: number;
@@ -23,7 +71,7 @@ export class HealthClient {
   private readonly baseUrl: string;
 
   constructor(
-    private readonly auth: Auth.OAuth2Client,
+    private readonly auth: AccessTokenProvider,
     opts: HealthClientOptions = {},
   ) {
     this.maxRetries = opts.maxRetries ?? 4;
@@ -32,15 +80,29 @@ export class HealthClient {
   }
 
   async fetch(p: FetchParams): Promise<DataTypeResult> {
-    const url = new URL(`${this.baseUrl}/users/me/${p.type}/read`);
-    url.searchParams.set("startTime", p.startTime);
-    url.searchParams.set("endTime", p.endTime);
-    const data = await this.request<{ points?: RawDataPoint[] }>(url);
+    const query = buildTypeQuery(p);
+    const points: RawDataPoint[] = [];
+    let pageToken: string | undefined;
+
+    do {
+      const url = new URL(`${this.baseUrl}/users/me/dataTypes/${query.dataType}/dataPoints`);
+      url.searchParams.set("pageSize", String(query.pageSize));
+      url.searchParams.set("filter", query.filter);
+      if (pageToken) url.searchParams.set("pageToken", pageToken);
+
+      const data = await this.request<{
+        dataPoints?: RawDataPoint[];
+        nextPageToken?: string;
+      }>(url);
+      points.push(...(data.dataPoints ?? []));
+      pageToken = data.nextPageToken;
+    } while (pageToken);
+
     return {
       type: p.type,
       startTime: p.startTime,
       endTime: p.endTime,
-      points: data.points ?? [],
+      points,
     };
   }
 
@@ -85,4 +147,37 @@ function backoffDelay(base: number, attempt: number): number {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+function buildTypeQuery(p: FetchParams): TypeQuery {
+  const cfg = TYPE_QUERIES[p.type];
+  const startDate = p.startTime.slice(0, 10);
+  const endDate = p.endTime.slice(0, 10);
+
+  switch (cfg.kind) {
+    case "daily":
+      return {
+        dataType: cfg.dataType,
+        filter: `${cfg.filterField}.date >= "${startDate}" AND ${cfg.filterField}.date < "${endDate}"`,
+        pageSize: cfg.pageSize,
+      };
+    case "interval":
+      return {
+        dataType: cfg.dataType,
+        filter: `${cfg.filterField}.interval.start_time >= "${p.startTime}" AND ${cfg.filterField}.interval.start_time < "${p.endTime}"`,
+        pageSize: cfg.pageSize,
+      };
+    case "sample":
+      return {
+        dataType: cfg.dataType,
+        filter: `${cfg.filterField}.sample_time.physical_time >= "${p.startTime}" AND ${cfg.filterField}.sample_time.physical_time < "${p.endTime}"`,
+        pageSize: cfg.pageSize,
+      };
+    case "sleep":
+      return {
+        dataType: cfg.dataType,
+        filter: `${cfg.filterField}.interval.end_time >= "${p.startTime}" AND ${cfg.filterField}.interval.end_time < "${p.endTime}"`,
+        pageSize: cfg.pageSize,
+      };
+  }
 }

@@ -1,4 +1,4 @@
-import { type Auth, google, type drive_v3 } from "googleapis";
+import { type Auth, type drive_v3, google } from "googleapis";
 import { NetworkError } from "../errors/index.js";
 
 const FOLDER_MIME = "application/vnd.google-apps.folder";
@@ -25,7 +25,7 @@ export class DriveClient {
   }
 
   async findChild(parentId: string, name: string): Promise<string | null> {
-    const q = `'${parentId}' in parents and name = '${escape(name)}' and trashed = false`;
+    const q = `'${parentId}' in parents and name = '${escapeQueryValue(name)}' and trashed = false`;
     const res = await this.drive.files.list({ q, fields: "files(id,name)", pageSize: 1 });
     return res.data.files?.[0]?.id ?? null;
   }
@@ -108,6 +108,6 @@ export class DriveClient {
   }
 }
 
-function escape(s: string): string {
+function escapeQueryValue(s: string): string {
   return s.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }

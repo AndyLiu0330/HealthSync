@@ -1,14 +1,16 @@
-import { describe, expect, it, vi } from "vitest";
 import type { RunSyncParams, RunSyncResult } from "@healthsync/core";
+import { describe, expect, it, vi } from "vitest";
 import { buildSyncCommand } from "./sync.js";
 
 describe("sync command", () => {
   it("passes parsed flags to runSync and prints JSON output when --json", async () => {
-    const runSync = vi.fn(async (_p: RunSyncParams): Promise<RunSyncResult> => ({
-      date: "2026-04-19",
-      perType: { steps: { type: "steps", status: "ok", rawFileId: "f1" } },
-      dailyMarkdownFileId: "md1",
-    }));
+    const runSync = vi.fn(
+      async (_p: RunSyncParams): Promise<RunSyncResult> => ({
+        date: "2026-04-19",
+        perType: { steps: { type: "steps", status: "ok", rawFileId: "f1" } },
+        dailyMarkdownFileId: "md1",
+      }),
+    );
     const out: string[] = [];
     const cmd = buildSyncCommand({
       buildDeps: async () => ({

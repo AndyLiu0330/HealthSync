@@ -1,10 +1,11 @@
-import { Command } from "commander";
 import { auth } from "@healthsync/core";
+import { Command } from "commander";
 
 export interface AuthCommandDeps {
   paths: { tokens: string };
   credentials: { clientId: string; clientSecret: string };
   writeLine: (s: string) => void;
+  readLine: (prompt: string) => Promise<string>;
   openBrowser: (url: string) => Promise<unknown>;
 }
 
@@ -14,20 +15,27 @@ export function buildAuthCommand(deps: AuthCommandDeps): Command {
   cmd
     .command("login")
     .description("Authorise with Google and store tokens")
+    .option("--manual", "print the auth URL and ask for the pasted redirect URL")
+    .option("--no-open", "print the auth URL instead of opening a browser")
+    .option("--port <port>", "fixed loopback callback port, useful with SSH tunnels", parsePort)
     .option("--json", "machine-readable output")
-    .action(async (opts: { json?: boolean }) => {
-      const tokens = await auth.login({
-        clientId: deps.credentials.clientId,
-        clientSecret: deps.credentials.clientSecret,
-        tokensPath: deps.paths.tokens,
-        openBrowser: deps.openBrowser,
-      });
-      if (opts.json) {
-        deps.writeLine(JSON.stringify({ authenticated: true, expiresAt: tokens.expires_at }));
-      } else {
-        deps.writeLine(`Authorised. Token expires at ${tokens.expires_at}.`);
-      }
-    });
+    .action(
+      async (opts: {
+        json?: boolean;
+        manual?: boolean;
+        open?: boolean;
+        port?: number;
+      }) => {
+        const tokens = opts.manual
+          ? await manualLogin(deps, opts.json)
+          : await loopbackLogin(deps, opts);
+        if (opts.json) {
+          deps.writeLine(JSON.stringify({ authenticated: true, expiresAt: tokens.expires_at }));
+        } else {
+          deps.writeLine(`Authorised. Token expires at ${tokens.expires_at}.`);
+        }
+      },
+    );
 
   cmd
     .command("status")
@@ -35,7 +43,10 @@ export function buildAuthCommand(deps: AuthCommandDeps): Command {
     .action(async (opts: { json?: boolean }) => {
       const s = await auth.authStatus({ tokensPath: deps.paths.tokens });
       if (opts.json) deps.writeLine(JSON.stringify(s));
-      else deps.writeLine(s.authenticated ? `Authenticated (expires ${s.expiresAt})` : "Not authenticated");
+      else
+        deps.writeLine(
+          s.authenticated ? `Authenticated (expires ${s.expiresAt})` : "Not authenticated",
+        );
     });
 
   cmd
@@ -48,4 +59,60 @@ export function buildAuthCommand(deps: AuthCommandDeps): Command {
     });
 
   return cmd;
+}
+
+async function loopbackLogin(
+  deps: AuthCommandDeps,
+  opts: { open?: boolean; port?: number; json?: boolean },
+) {
+  return auth.login({
+    clientId: deps.credentials.clientId,
+    clientSecret: deps.credentials.clientSecret,
+    tokensPath: deps.paths.tokens,
+    ...(opts.port !== undefined ? { loopbackPort: opts.port } : {}),
+    openBrowser:
+      opts.open === false
+        ? async (url) => {
+            if (!opts.json) {
+              deps.writeLine("Open this URL in your local browser:");
+              deps.writeLine(url);
+            } else {
+              deps.writeLine(JSON.stringify({ authUrl: url }));
+            }
+          }
+        : deps.openBrowser,
+  });
+}
+
+async function manualLogin(deps: AuthCommandDeps, json = false) {
+  const session = auth.createManualLoginSession({
+    clientId: deps.credentials.clientId,
+    clientSecret: deps.credentials.clientSecret,
+    tokensPath: deps.paths.tokens,
+  });
+  if (json) {
+    deps.writeLine(
+      JSON.stringify({
+        authUrl: session.authUrl,
+        redirectUri: session.redirectUri,
+      }),
+    );
+  } else {
+    deps.writeLine("Open this URL in your local browser:");
+    deps.writeLine(session.authUrl);
+    deps.writeLine("");
+    deps.writeLine(
+      `After Google redirects to ${session.redirectUri}, copy the full browser URL and paste it below.`,
+    );
+  }
+  const redirectUrl = await deps.readLine("Paste the full redirect URL here: ");
+  return session.complete(redirectUrl);
+}
+
+function parsePort(value: string): number {
+  const port = Number(value);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error("--port must be an integer from 1 to 65535");
+  }
+  return port;
 }
