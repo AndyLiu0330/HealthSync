@@ -8,6 +8,7 @@ import {
   DRIVE_SCOPES,
   GOOGLE_HEALTH_SCOPES,
   createManualLoginSession,
+  getScopedAccessToken,
 } from "./index.js";
 
 async function tmpPath() {
@@ -77,6 +78,46 @@ describe("auth scopes", () => {
     expect(tokens.access_token).toBe("AT");
     expect(tokens.refresh_token).toBe("RT");
     expect(JSON.parse(await readFile(tokensPath, "utf8")).refresh_token).toBe("RT");
+    expect(tokenRequest.isDone()).toBe(true);
+  });
+
+  it("refreshes an access token with a narrowed scope set", async () => {
+    const tokensPath = await tmpPath();
+    await import("./token-store.js").then(({ saveTokens }) =>
+      saveTokens(tokensPath, {
+        access_token: "OLD_AT",
+        refresh_token: "RT",
+        expires_at: "2026-01-01T00:00:00.000Z",
+        scope: [...GOOGLE_HEALTH_SCOPES, ...DRIVE_SCOPES].join(" "),
+      }),
+    );
+
+    const tokenRequest = nock("https://oauth2.googleapis.com")
+      .post("/token", (body) => {
+        const params = bodyParams(body);
+        expect(params.get("refresh_token")).toBe("RT");
+        expect(params.get("client_id")).toBe("client-id");
+        expect(params.get("client_secret")).toBe("client-secret");
+        expect(params.get("grant_type")).toBe("refresh_token");
+        expect(params.get("scope")).toBe(GOOGLE_HEALTH_SCOPES.join(" "));
+        return true;
+      })
+      .reply(200, {
+        access_token: "HEALTH_AT",
+        expires_in: 3600,
+        scope: GOOGLE_HEALTH_SCOPES.join(" "),
+        token_type: "Bearer",
+      });
+
+    const token = await getScopedAccessToken({
+      clientId: "client-id",
+      clientSecret: "client-secret",
+      tokensPath,
+      scopes: GOOGLE_HEALTH_SCOPES,
+    });
+
+    expect(token.token).toBe("HEALTH_AT");
+    expect(token.scope).toBe(GOOGLE_HEALTH_SCOPES.join(" "));
     expect(tokenRequest.isDone()).toBe(true);
   });
 });

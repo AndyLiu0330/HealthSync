@@ -1,5 +1,5 @@
 import type { DataType } from "../config/index.js";
-import { toCanonical, mergeCanonical, type CanonicalDay } from "../transform/json/index.js";
+import { type CanonicalDay, mergeCanonical, toCanonical } from "../transform/json/index.js";
 import { renderDailyNote } from "../transform/markdown/index.js";
 
 export interface HealthPort {

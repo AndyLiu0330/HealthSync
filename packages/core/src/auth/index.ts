@@ -34,6 +34,12 @@ export interface ManualLoginSession {
   complete(redirectUrl: string): Promise<StoredTokens>;
 }
 
+export interface ScopedAccessToken {
+  token: string;
+  expiresAt: string;
+  scope: string;
+}
+
 const DEFAULT_MANUAL_REDIRECT_URI = "http://127.0.0.1:53682/callback";
 
 export async function login(opts: AuthOptions): Promise<StoredTokens> {
@@ -148,6 +154,44 @@ export async function getAuthenticatedClient(
   });
 
   return oauth2;
+}
+
+export async function getScopedAccessToken(
+  opts: Omit<AuthOptions, "openBrowser" | "loopbackPort">,
+): Promise<ScopedAccessToken> {
+  const tokens = await loadTokens(opts.tokensPath);
+  if (!tokens) throw new AuthError("no stored tokens — run `healthsync auth login` first");
+
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: opts.clientId,
+      client_secret: opts.clientSecret,
+      refresh_token: tokens.refresh_token,
+      grant_type: "refresh_token",
+      scope: (opts.scopes ?? ALL_SCOPES).join(" "),
+    }),
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    access_token?: string;
+    expires_in?: number;
+    scope?: string;
+    error?: string;
+    error_description?: string;
+  };
+  if (!res.ok || !data.access_token || !data.expires_in) {
+    throw new AuthError(
+      data.error_description ??
+        data.error ??
+        `failed to refresh scoped access token (${res.status})`,
+    );
+  }
+  return {
+    token: data.access_token,
+    expiresAt: new Date(Date.now() + data.expires_in * 1000).toISOString(),
+    scope: data.scope ?? (opts.scopes ?? ALL_SCOPES).join(" "),
+  };
 }
 
 export async function authStatus(opts: { tokensPath: string }): Promise<

@@ -1,7 +1,10 @@
-import type { Auth } from "googleapis";
 import type { DataType } from "../config/index.js";
 import { NetworkError, RateLimitError } from "../errors/index.js";
 import type { DataTypeResult, RawDataPoint } from "./types.js";
+
+export interface AccessTokenProvider {
+  getAccessToken(): Promise<{ token?: string | null }>;
+}
 
 export interface HealthClientOptions {
   maxRetries?: number;
@@ -68,7 +71,7 @@ export class HealthClient {
   private readonly baseUrl: string;
 
   constructor(
-    private readonly auth: Auth.OAuth2Client,
+    private readonly auth: AccessTokenProvider,
     opts: HealthClientOptions = {},
   ) {
     this.maxRetries = opts.maxRetries ?? 4;

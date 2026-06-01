@@ -40,15 +40,13 @@ export async function loadConfig(path: string): Promise<HealthSyncConfig> {
   };
 
   if (typeof merged.driveRootFolder !== "string") {
-    throw new ConfigError(`driveRootFolder must be a string`);
+    throw new ConfigError("driveRootFolder must be a string");
   }
   if (!(VALID_LOG_LEVELS as readonly string[]).includes(merged.logLevel)) {
-    throw new ConfigError(
-      `logLevel must be one of: ${VALID_LOG_LEVELS.join(", ")}`,
-    );
+    throw new ConfigError(`logLevel must be one of: ${VALID_LOG_LEVELS.join(", ")}`);
   }
   if (!Array.isArray(merged.dataTypes)) {
-    throw new ConfigError(`dataTypes must be an array`);
+    throw new ConfigError("dataTypes must be an array");
   }
 
   const supported: readonly string[] = SUPPORTED_DATA_TYPES;

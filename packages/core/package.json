@@ -18,7 +18,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "googleapis": "^144.0.0",
+    "googleapis": "^173.0.0",
     "open": "^10.1.0"
   },
   "devDependencies": {

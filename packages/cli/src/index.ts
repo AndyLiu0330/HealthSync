@@ -84,14 +84,29 @@ async function buildSyncDeps(): Promise<{
 }> {
   const cfg = await loadConfig(configPath());
   const credentials = getCredentials();
-  const client = await auth.getAuthenticatedClient({
+  const driveClient = await auth.getAuthenticatedClient({
     clientId: credentials.clientId,
     clientSecret: credentials.clientSecret,
     tokensPath: tokensPath(),
   });
+  let healthToken: Awaited<ReturnType<typeof auth.getScopedAccessToken>> | undefined;
+  const healthAuth = {
+    async getAccessToken(): Promise<{ token?: string | null }> {
+      if (healthToken && Date.parse(healthToken.expiresAt) - Date.now() > 60_000) {
+        return { token: healthToken.token };
+      }
+      healthToken = await auth.getScopedAccessToken({
+        clientId: credentials.clientId,
+        clientSecret: credentials.clientSecret,
+        tokensPath: tokensPath(),
+        scopes: auth.GOOGLE_HEALTH_SCOPES,
+      });
+      return { token: healthToken.token };
+    },
+  };
   return {
-    health: new HealthClient(client),
-    drive: new DriveClient(client),
+    health: new HealthClient(healthAuth),
+    drive: new DriveClient(driveClient),
     state: {
       async get() {
         return loadSyncState(statePath());
