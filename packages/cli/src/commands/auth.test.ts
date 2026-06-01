@@ -1,6 +1,6 @@
 import { auth } from "@healthsync/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildAuthCommand } from "./auth.js";
+import { buildAuthCommand, buildConnectCommand } from "./auth.js";
 
 describe("auth command", () => {
   afterEach(() => vi.restoreAllMocks());
@@ -88,6 +88,33 @@ describe("auth command", () => {
     expect(openBrowser).not.toHaveBeenCalled();
     expect(out).toContain("Open this URL in your local browser:");
     expect(out).toContain("https://accounts.google.com/o/oauth2/v2/auth?state=STATE");
+    expect(out.at(-1)).toBe("Authorised. Token expires at 2026-04-19T12:00:00.000Z.");
+  });
+
+  it("connect runs the same loopback login flow from a top-level command", async () => {
+    const login = vi.spyOn(auth, "login").mockImplementation(async () => ({
+      access_token: "AT",
+      refresh_token: "RT",
+      expires_at: "2026-04-19T12:00:00.000Z",
+      scope: "scope-a",
+    }));
+    const out: string[] = [];
+    const cmd = buildConnectCommand({
+      paths: { tokens: "/tmp/tokens.json" },
+      credentials: { clientId: "client-id", clientSecret: "client-secret" },
+      writeLine: (s) => out.push(s),
+      openBrowser: vi.fn(),
+      readLine: vi.fn(),
+    });
+
+    await cmd.parseAsync(["node", "healthsync", "connect"]);
+
+    expect(login).toHaveBeenCalledWith({
+      clientId: "client-id",
+      clientSecret: "client-secret",
+      tokensPath: "/tmp/tokens.json",
+      openBrowser: expect.any(Function),
+    });
     expect(out.at(-1)).toBe("Authorised. Token expires at 2026-04-19T12:00:00.000Z.");
   });
 });

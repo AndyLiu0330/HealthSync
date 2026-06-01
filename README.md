@@ -50,49 +50,53 @@ Copy-Item .env.example .env
 ```bash
 pnpm install
 pnpm build
+cd packages/cli
+pnpm link --global
 ```
 
 This builds both workspace packages (`@healthsync/core` and `@healthsync/cli`) into `packages/*/dist`.
+The global link makes the `healthsync` command available in your shell.
+If `healthsync --help` is not found after linking, run `pnpm setup`, restart your shell, and repeat the link step.
 
 ## Usage
 
-All commands are invoked via the compiled CLI entry point:
+All commands are invoked with the `healthsync` command:
 
 ```bash
 # First-time authorisation (opens browser, captures localhost callback)
-node packages/cli/dist/index.js auth login
+healthsync connect
 
 # First-time authorisation on a remote/headless server
-node packages/cli/dist/index.js auth login --manual
+healthsync connect --manual
 
 # Check auth state
-node packages/cli/dist/index.js auth status
+healthsync auth status
 
 # Revoke local tokens
-node packages/cli/dist/index.js auth logout
+healthsync auth logout
 
 # Sync yesterday's data (incremental default)
-node packages/cli/dist/index.js sync
+healthsync sync
 
 # Full backfill from a date
-node packages/cli/dist/index.js sync --full --since 2026-01-01
+healthsync sync --full --since 2026-01-01
 
 # Only specific data types
-node packages/cli/dist/index.js sync --types steps,sleep
+healthsync sync --types steps,sleep
 
 # Overwrite existing files in Drive
-node packages/cli/dist/index.js sync --force
+healthsync sync --force
 
 # Machine-readable output for scripts
-node packages/cli/dist/index.js sync --json
+healthsync sync --json
 
 # List days already synced (reads .state/sync-state.json in Drive)
-node packages/cli/dist/index.js list
-node packages/cli/dist/index.js list --json
+healthsync list
+healthsync list --json
 
 # Show effective configuration (merged defaults + config file)
-node packages/cli/dist/index.js config show
-node packages/cli/dist/index.js config show --json
+healthsync config show
+healthsync config show --json
 ```
 
 Supported data types: `steps`, `heart-rate`, `sleep`, `active-zone-minutes`, `spo2`.
@@ -111,7 +115,7 @@ ssh -L 53682:127.0.0.1:53682 user@remote-server
 In that SSH session on the remote server, run:
 
 ```bash
-node packages/cli/dist/index.js auth login --no-open --port 53682
+healthsync connect --no-open --port 53682
 ```
 
 The CLI prints a Google authorisation URL. Open it in your local browser and sign in. Google redirects to `http://127.0.0.1:53682/callback?...` on your laptop, and SSH forwards that request to the remote CLI.
@@ -119,14 +123,14 @@ The CLI prints a Google authorisation URL. Open it in your local browser and sig
 Manual copy/paste login is still available as a fallback:
 
 ```bash
-node packages/cli/dist/index.js auth login --manual
+healthsync connect --manual
 ```
 
 It prints a Google authorisation URL, then asks you to paste the full redirect URL after consent.
 
 ### Tokens on disk
 
-After `auth login`, OAuth tokens are stored at:
+After `connect`, OAuth tokens are stored at:
 
 - Linux / macOS: `~/.config/healthsync/tokens.json` (mode `0600`)
 - Windows: `%APPDATA%\healthsync\tokens.json`

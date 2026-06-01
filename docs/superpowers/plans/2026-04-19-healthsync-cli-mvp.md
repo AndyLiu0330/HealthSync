@@ -355,7 +355,7 @@ Run:
 pnpm install
 pnpm --filter @healthsync/core build
 pnpm --filter @healthsync/cli build
-node packages/cli/dist/index.js
+healthsync
 ```
 Expected: prints `healthsync 0.0.0`.
 
@@ -1090,7 +1090,7 @@ export async function login(opts: AuthOptions): Promise<StoredTokens> {
 
 export async function getAuthenticatedClient(opts: Omit<AuthOptions, "openBrowser">) {
   const tokens = await loadTokens(opts.tokensPath);
-  if (!tokens) throw new AuthError("no stored tokens — run `healthsync auth login` first");
+  if (!tokens) throw new AuthError("no stored tokens — run `healthsync connect` first");
 
   const oauth2 = new google.auth.OAuth2(opts.clientId, opts.clientSecret);
   oauth2.setCredentials({
@@ -2731,7 +2731,7 @@ Run:
 ```bash
 pnpm --filter @healthsync/core build
 pnpm --filter @healthsync/cli build
-HEALTHSYNC_CLIENT_ID=fake HEALTHSYNC_CLIENT_SECRET=fake node packages/cli/dist/index.js --help
+HEALTHSYNC_CLIENT_ID=fake HEALTHSYNC_CLIENT_SECRET=fake healthsync --help
 ```
 Expected: prints commander help with `auth`, `sync`, `list`, `config` subcommands.
 
@@ -2879,19 +2879,19 @@ pnpm build
 
 ```bash
 # First-time authorisation (opens browser, then captures localhost callback)
-node packages/cli/dist/index.js auth login
+healthsync connect
 
 # Sync yesterday's data (incremental default)
-node packages/cli/dist/index.js sync
+healthsync sync
 
 # Full backfill from a date
-node packages/cli/dist/index.js sync --full --since 2026-01-01
+healthsync sync --full --since 2026-01-01
 
 # Only specific types
-node packages/cli/dist/index.js sync --types steps,sleep
+healthsync sync --types steps,sleep
 
 # Machine-readable output for scripts
-node packages/cli/dist/index.js sync --json
+healthsync sync --json
 ```
 
 ## Drive layout produced

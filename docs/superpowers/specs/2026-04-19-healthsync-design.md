@@ -94,7 +94,7 @@ healthsync/
 All commands support `--json` for machine-readable output.
 
 ```
-healthsync auth login              # first-time OAuth authorisation (opens browser)
+healthsync connect              # first-time OAuth authorisation (opens browser)
 healthsync auth status             # check whether a valid token exists
 healthsync auth logout             # delete stored tokens
 
@@ -195,7 +195,7 @@ If a data type has no data for a given day (e.g., user didn't wear the watch), t
 
 ## 9. Authentication
 
-- **Flow**: OAuth 2.0 Installed Application flow with loopback redirect (`http://127.0.0.1:<random-port>/callback`). On first `healthsync auth login`, the CLI starts a temporary local server, opens the user's default browser, and captures the authorisation code on callback.
+- **Flow**: OAuth 2.0 Installed Application flow with loopback redirect (`http://127.0.0.1:<random-port>/callback`). On first `healthsync connect`, the CLI starts a temporary local server, opens the user's default browser, and captures the authorisation code on callback.
 - **Scopes (requested on consent)**:
   - Google Health API: minimum scopes needed to read the five data types in §6.4 (exact scope strings finalised during implementation against the official docs).
   - Google Drive API: `https://www.googleapis.com/auth/drive.file` — least-privilege, only grants access to files the app itself creates.
@@ -203,7 +203,7 @@ If a data type has no data for a given day (e.g., user didn't wear the watch), t
   - Path: `~/.config/healthsync/tokens.json` (Linux/macOS), `%APPDATA%\healthsync\tokens.json` (Windows).
   - File permissions: `0600`.
   - Contents: `{ access_token, refresh_token, expires_at, scope }`.
-- **Refresh**: Automatic. If the access token is expired, `auth/` refreshes before returning it to callers. If refresh fails (revoked/expired), commands fail with a clear "please run `healthsync auth login` again" message.
+- **Refresh**: Automatic. If the access token is expired, `auth/` refreshes before returning it to callers. If refresh fails (revoked/expired), commands fail with a clear "please run `healthsync connect` again" message.
 - **Future Web App compatibility**: The Web App will use server-side authorisation-code flow, but the token record schema is identical, so the `auth/` storage layer can be reused.
 
 ## 10. Error handling & resilience
@@ -234,7 +234,7 @@ If a data type has no data for a given day (e.g., user didn't wear the watch), t
 
 The MVP is "done" when:
 
-1. `healthsync auth login` completes successfully end-to-end on a fresh machine.
+1. `healthsync connect` completes successfully end-to-end on a fresh machine.
 2. `healthsync sync` fetches all five data types for the current day and uploads them to Drive in both `raw/` and `daily/` layouts.
 3. `healthsync sync --full --since 2026-01-01` backfills history without duplicates.
 4. The generated Markdown daily notes open in Obsidian with correct front matter, readable structure, and working wikilinks.
