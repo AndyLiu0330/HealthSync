@@ -7,7 +7,13 @@ CLI that syncs Pixel Watch health data from the [Google Health API](https://deve
 - Node.js 22 LTS (`nvm use` reads `.nvmrc`)
 - pnpm 9+ (`corepack enable` is the easiest way to install it)
 - A Pixel Watch linked to your Google account
-- A Google Cloud project with OAuth 2.0 credentials (see below)
+- Your own Google Cloud project with OAuth 2.0 credentials (see below)
+
+## Bring your own Google Cloud project
+
+HealthSync does not ship with shared Google Cloud credentials. For local development or self-hosting, create your own Google Cloud project and configure OAuth credentials for your Google account.
+
+The Google Cloud project ID is user-specific but not treated as a secret. OAuth client secrets, downloaded credential JSON files, `.env` files, and local OAuth tokens are secrets and must not be committed.
 
 ## Google Cloud project setup (one-time)
 
@@ -18,21 +24,22 @@ CLI that syncs Pixel Watch health data from the [Google Health API](https://deve
 3. Configure the OAuth consent screen:
    - User Type: **External**
    - Add yourself as a Test User
+   - Add your app name and contact email
    - Add the readonly Health scopes needed by the default data types:
      - `https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly`
      - `https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly`
      - `https://www.googleapis.com/auth/googlehealth.sleep.readonly`
    - Add `https://www.googleapis.com/auth/drive.file`
 4. Credentials -> Create OAuth client ID -> Application type: **Desktop app**.
-5. Download the client JSON. Copy `.env.example` to `.env`, then paste the two values:
+5. Download the OAuth client JSON, then copy only the `client_id` and `client_secret` values into your local `.env` file:
 
 ```bash
 cp .env.example .env
 ```
 
 ```bash
-HEALTHSYNC_CLIENT_ID=<client_id>
-HEALTHSYNC_CLIENT_SECRET=<client_secret>
+HEALTHSYNC_CLIENT_ID=your-client-id.apps.googleusercontent.com
+HEALTHSYNC_CLIENT_SECRET=your-client-secret
 ```
 
 The CLI automatically loads `.env` from the repository root. Shell environment variables still win if both are set.
@@ -42,6 +49,8 @@ On Windows (PowerShell), create the same `.env` file manually or with:
 ```powershell
 Copy-Item .env.example .env
 ```
+
+Do not commit the downloaded OAuth JSON file. The repository `.gitignore` excludes common local credential filenames, but you should still treat any downloaded Google credential file as private.
 
 > **Launch timing.** Google officially recommends waiting until **late May 2026** to **publicly launch** integrations against the Google Health API (to align with the Fitbit account deprecation). Development and personal use are fine today - that's what this MVP targets.
 
