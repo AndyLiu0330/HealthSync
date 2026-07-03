@@ -131,5 +131,13 @@ function hasPayload(day: CanonicalDay, type: DataType): boolean {
       return day.activeZoneMinutes !== undefined;
     case "spo2":
       return day.spo2 !== undefined;
+    case "calories":
+      return day.calories !== undefined;
+    case "resting-heart-rate":
+      return day.restingHeartRate !== undefined;
+    case "heart-rate-variability":
+      return day.heartRateVariability !== undefined;
+    case "respiratory-rate":
+      return day.respiratoryRate !== undefined;
   }
 }

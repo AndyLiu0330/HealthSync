@@ -107,4 +107,52 @@ describe("toCanonical", () => {
     });
     expect(c.spo2).toEqual({ averageOvernight: 96.4 });
   });
+
+  describe("toCanonical v2 types", () => {
+    const base = { startTime: "2026-07-01T00:00:00.000Z", endTime: "2026-07-02T00:00:00.000Z" };
+
+    it("parses daily resting heart rate", () => {
+      const day = toCanonical({
+        ...base,
+        type: "resting-heart-rate",
+        points: [{ dailyRestingHeartRate: { beatsPerMinute: "55" } }],
+      });
+      expect(day.restingHeartRate?.bpm).toBe(55);
+    });
+
+    it("averages HRV across points", () => {
+      const day = toCanonical({
+        ...base,
+        type: "heart-rate-variability",
+        points: [
+          { dailyHeartRateVariability: { averageHeartRateVariabilityMilliseconds: 40 } },
+          { dailyHeartRateVariability: { averageHeartRateVariabilityMilliseconds: 60 } },
+        ],
+      });
+      expect(day.heartRateVariability?.rmssdMs).toBe(50);
+    });
+
+    it("parses daily respiratory rate", () => {
+      const day = toCanonical({
+        ...base,
+        type: "respiratory-rate",
+        points: [{ dailyRespiratoryRate: { breathsPerMinute: 14.2 } }],
+      });
+      expect(day.respiratoryRate?.breathsPerMinute).toBe(14.2);
+    });
+
+    it("sums calories intervals, tolerating alternate field names", () => {
+      const day = toCanonical({
+        ...base,
+        type: "calories",
+        points: [{ totalCalories: { calories: 1200 } }, { totalCalories: { kilocalories: "900" } }],
+      });
+      expect(day.calories?.total).toBe(2100);
+    });
+
+    it("returns bare date when a v2 type has no points", () => {
+      const day = toCanonical({ ...base, type: "calories", points: [] });
+      expect(day).toEqual({ date: "2026-07-01" });
+    });
+  });
 });
