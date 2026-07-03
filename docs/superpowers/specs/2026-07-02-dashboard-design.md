@@ -17,8 +17,10 @@ healthsync dashboard --range day|week|month   # default: week
 
 Flow, in order:
 
-1. Run the existing sync pipeline for the chosen range (writes `raw/` +
-   `daily/` to Drive as today).
+1. Run the existing sync pipeline for each day in the chosen range that has
+   no raw files in Drive yet (writes `raw/` + `daily/` to Drive as today).
+   Already-synced days are skipped: Drive uploads without `overwriteFileId`
+   always create new files, so re-syncing would duplicate them.
 2. Read back the raw JSON for that range from Drive `raw/` (single source of
    truth; no separate Health API fetch for display).
 3. Render a single self-contained `dashboard.html`.
@@ -30,9 +32,9 @@ The existing `sync` command is unchanged.
 
 - One self-contained `dashboard.html` — all CSS/JS/SVG inlined, no external
   resources, viewable offline.
-- Local copy at the platform data dir (e.g.
-  `~/.local/share/healthsync/dashboard.html`), auto-opened in the default
-  browser after generation.
+- Local copy in the existing HealthSync config dir (e.g.
+  `~/.config/healthsync/dashboard.html`), auto-opened in the default browser
+  after generation.
 - Uploaded to Drive at `HealthSync/dashboard.html`, overwritten on each run,
   so it is viewable from other devices.
 
@@ -43,8 +45,11 @@ The existing `sync` command is unchanged.
   configured `dataTypes`; metrics not configured or not returned are simply
   omitted.
 - **Trend charts** (below, one per metric):
-  - `day`: intraday curve for that day (e.g. heart rate over the day).
-  - `week` / `month`: one data point per day, line chart.
+  - `day`: summary tiles only, no chart. (An intraday curve was considered
+    but dropped: the canonical data model carries daily aggregates only, and
+    raw point shapes are pre-launch with no guaranteed intraday timestamps.)
+  - `week` / `month`: one data point per day, line chart; missing days break
+    the line rather than bridging the gap.
   - Rendered as inline SVG. No frontend framework, no chart library.
 
 ## Code placement
@@ -71,5 +76,7 @@ The existing `sync` command is unchanged.
 
 ## Out of scope (deliberate)
 
-Interactive filtering, custom date ranges, dark mode, chart libraries, hover
-tooltips, any localhost server. Revisit if/when static SVG stops being enough.
+Interactive filtering, custom date ranges, chart libraries, JS-driven
+tooltips, any localhost server. Revisit if/when static SVG stops being
+enough. (CSS-only dark mode and native SVG `<title>` hover tooltips ARE
+included — they cost nothing and need no JS.)
