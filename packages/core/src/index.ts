@@ -22,3 +22,14 @@ export {
   type RunSyncResult,
   type PerTypeResult,
 } from "./sync/index.js";
+export {
+  renderDashboard,
+  type DashboardRange,
+  type RenderDashboardParams,
+} from "./report/render.js";
+export {
+  runDashboard,
+  type DashboardDrivePort,
+  type RunDashboardParams,
+  type RunDashboardResult,
+} from "./report/run.js";
