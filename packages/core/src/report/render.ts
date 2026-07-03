@@ -162,15 +162,13 @@ function lineChart(values: Array<number | undefined>, dates: string[], decimals:
         `<line class="chart-grid" x1="${PAD_X}" y1="${y(v).toFixed(1)}" x2="${W - PAD_X}" y2="${y(v).toFixed(1)}" />`,
     )
     .join("");
-  const labels =
-    levels
-      .map(
-        (v) =>
-          `<text class="chart-text" x="${PAD_X - 6}" y="${(y(v) + 4).toFixed(1)}" text-anchor="end">${fmt(v, decimals)}</text>`,
-      )
-      .join("") +
-    `<text class="chart-text" x="${PAD_X}" y="${H - 8}">${dates[0] ?? ""}</text>` +
-    `<text class="chart-text" x="${W - PAD_X}" y="${H - 8}" text-anchor="end">${dates[dates.length - 1] ?? ""}</text>`;
+  const levelLabels = levels
+    .map(
+      (v) =>
+        `<text class="chart-text" x="${PAD_X - 6}" y="${(y(v) + 4).toFixed(1)}" text-anchor="end">${fmt(v, decimals)}</text>`,
+    )
+    .join("");
+  const labels = `${levelLabels}<text class="chart-text" x="${PAD_X}" y="${H - 8}">${dates[0] ?? ""}</text><text class="chart-text" x="${W - PAD_X}" y="${H - 8}" text-anchor="end">${dates[dates.length - 1] ?? ""}</text>`;
 
   return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="daily trend">${grid}${segments.join("")}${dots}${labels}</svg>`;
 }
