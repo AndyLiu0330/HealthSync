@@ -44,4 +44,22 @@ describe("renderDailyNote", () => {
     expect(md).not.toContain("😴 Sleep");
     expect(md).not.toContain("🫁 SpO2");
   });
+
+  it("renders sections for the v2 types when present", () => {
+    const md = renderDailyNote({
+      date: "2026-07-01",
+      calories: { total: 2100 },
+      restingHeartRate: { bpm: 55 },
+      heartRateVariability: { rmssdMs: 48.5 },
+      respiratoryRate: { breathsPerMinute: 14.2 },
+    });
+    expect(md).toContain("Calories");
+    expect(md).toContain("2100 kcal");
+    expect(md).toContain("55 bpm");
+    expect(md).toContain("48.5 ms");
+    expect(md).toContain("14.2");
+    expect(md).toContain(
+      "types: [calories, resting-heart-rate, heart-rate-variability, respiratory-rate]",
+    );
+  });
 });
