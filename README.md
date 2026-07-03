@@ -1,37 +1,77 @@
 # HealthSync
 
-CLI that syncs Pixel Watch health data from the [Google Health API](https://developers.google.com/health) into a Google Drive folder, as both raw JSON archives and Obsidian-friendly Markdown daily notes.
+Turn Google Health data into a beautiful personal dashboard and daily archive.
 
-## Prerequisites
+HealthSync syncs Pixel Watch and Google Health metrics into your own Google Drive, keeps raw day-by-day exports, writes markdown notes for journaling workflows, and generates a polished static dashboard for quick review.
 
-- Node.js 22 LTS (`nvm use` reads `.nvmrc`)
-- pnpm 9+ (`corepack enable` is the easiest way to install it)
+## Dashboard Demo
+
+### Day
+
+![HealthSync day dashboard](docs/assets/readme/day-dashboard.png)
+
+### Month
+
+![HealthSync month dashboard](docs/assets/readme/month-dashboard.png)
+
+### Week
+
+![HealthSync week dashboard](docs/assets/readme/week-dashboard.png)
+
+## Highlights
+
+- Syncs Google Health / Pixel Watch data into your own Google Drive
+- Generates a desktop-friendly dashboard for day, week, and month views
+- Archives raw daily JSON for long-term reference and reprocessing
+- Writes markdown daily notes that work well with Obsidian-style journaling
+- Keeps credentials and data ownership in your own Google Cloud / Drive setup
+
+## Quick Start
+
+### Prerequisites
+
+- Node.js 22 LTS
+- pnpm 9+
 - A Pixel Watch linked to your Google account
-- Your own Google Cloud project with OAuth 2.0 credentials (see below)
+- Your own Google Cloud project with OAuth credentials for Google Health and Google Drive
 
-## Bring your own Google Cloud project
+### Install
 
-HealthSync does not ship with shared Google Cloud credentials. For local development or self-hosting, create your own Google Cloud project and configure OAuth credentials for your Google account.
+```bash
+pnpm install
+pnpm build
+cd packages/cli
+pnpm link --global
+```
 
-The Google Cloud project ID is user-specific but not treated as a secret. OAuth client secrets, downloaded credential JSON files, `.env` files, and local OAuth tokens are secrets and must not be committed.
+This builds both workspace packages (`@healthsync/core` and `@healthsync/cli`) into `packages/*/dist` and makes the `healthsync` command available in your shell.
 
-## Google Cloud project setup (one-time)
+### First Run
 
-1. Visit <https://console.cloud.google.com/> and create a new project.
-2. Enable APIs (APIs & Services -> Library):
+```bash
+healthsync connect
+healthsync sync
+healthsync dashboard --range week
+```
+
+## Google Cloud Setup
+
+HealthSync does not ship with shared Google Cloud credentials. For local use, create your own Google Cloud project and configure OAuth against your own Google account.
+
+1. Go to <https://console.cloud.google.com/> and create a project.
+2. Enable:
    - Google Health API
    - Google Drive API
 3. Configure the OAuth consent screen:
    - User Type: **External**
    - Add yourself as a Test User
-   - Add your app name and contact email
-   - Add the readonly Health scopes needed by the default data types:
+   - Add these scopes:
      - `https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly`
      - `https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly`
      - `https://www.googleapis.com/auth/googlehealth.sleep.readonly`
-   - Add `https://www.googleapis.com/auth/drive.file`
-4. Credentials -> Create OAuth client ID -> Application type: **Desktop app**.
-5. Download the OAuth client JSON, then copy only the `client_id` and `client_secret` values into your local `.env` file:
+     - `https://www.googleapis.com/auth/drive.file`
+4. Create an OAuth client ID with application type **Desktop app**.
+5. Copy the client ID and client secret into `.env`:
 
 ```bash
 cp .env.example .env
@@ -42,40 +82,15 @@ HEALTHSYNC_CLIENT_ID=your-client-id.apps.googleusercontent.com
 HEALTHSYNC_CLIENT_SECRET=your-client-secret
 ```
 
-The CLI automatically loads `.env` from the repository root. Shell environment variables still win if both are set.
-
-On Windows (PowerShell), create the same `.env` file manually or with:
-
-```powershell
-Copy-Item .env.example .env
-```
-
-Do not commit the downloaded OAuth JSON file. The repository `.gitignore` excludes common local credential filenames, but you should still treat any downloaded Google credential file as private.
-
-> **Launch timing.** Google officially recommends waiting until **late May 2026** to **publicly launch** integrations against the Google Health API (to align with the Fitbit account deprecation). Development and personal use are fine today - that's what this MVP targets.
-
-## Install + build
-
-```bash
-pnpm install
-pnpm build
-cd packages/cli
-pnpm link --global
-```
-
-This builds both workspace packages (`@healthsync/core` and `@healthsync/cli`) into `packages/*/dist`.
-The global link makes the `healthsync` command available in your shell.
-If `healthsync --help` is not found after linking, run `pnpm setup`, restart your shell, and repeat the link step.
+The CLI automatically loads `.env` from the repository root. Shell environment variables still take precedence if both are set.
 
 ## Usage
 
-All commands are invoked with the `healthsync` command:
-
 ```bash
-# First-time authorisation (opens browser, captures localhost callback)
+# First-time authorization
 healthsync connect
 
-# First-time authorisation on a remote/headless server
+# Headless / remote authorization
 healthsync connect --manual
 
 # Check auth state
@@ -84,74 +99,69 @@ healthsync auth status
 # Revoke local tokens
 healthsync auth logout
 
-# Sync yesterday's data (incremental default)
+# Sync yesterday's data
 healthsync sync
 
-# Full backfill from a date
+# Backfill starting from a date
 healthsync sync --full --since 2026-01-01
 
-# Only specific data types
+# Limit to specific data types
 healthsync sync --types steps,sleep
 
 # Overwrite existing files in Drive
 healthsync sync --force
 
-# Machine-readable output for scripts
+# Machine-readable output
 healthsync sync --json
 
-# List days already synced (reads .state/sync-state.json in Drive)
+# Inspect synced days
 healthsync list
 healthsync list --json
 
-# Sync the last week (or day/month) and open a static HTML dashboard
+# Generate a dashboard
 healthsync dashboard --range week
 
-# Show effective configuration (merged defaults + config file)
+# Show effective config
 healthsync config show
 healthsync config show --json
 ```
 
 Supported data types: `steps`, `heart-rate`, `sleep`, `active-zone-minutes`, `spo2`.
-The `spo2` shortcut reads Google Health's `daily-oxygen-saturation` data type.
 
-### Remote server authorisation
+## Remote Authorization
 
-When the CLI runs on a remote server and your browser runs on your laptop, use an SSH tunnel so Google's loopback redirect reaches the remote CLI listener.
+If the CLI runs on a remote server and your browser runs locally, use an SSH tunnel so Google's loopback redirect can still reach the remote CLI listener.
 
-From your laptop, connect to the server with port forwarding:
+From your laptop:
 
 ```bash
 ssh -L 53682:127.0.0.1:53682 user@remote-server
 ```
 
-In that SSH session on the remote server, run:
+Then on the remote server:
 
 ```bash
 healthsync connect --no-open --port 53682
 ```
 
-The CLI prints a Google authorisation URL. Open it in your local browser and sign in. Google redirects to `http://127.0.0.1:53682/callback?...` on your laptop, and SSH forwards that request to the remote CLI.
-
-Manual copy/paste login is still available as a fallback:
+As a fallback, you can always use:
 
 ```bash
 healthsync connect --manual
 ```
 
-It prints a Google authorisation URL, then asks you to paste the full redirect URL after consent.
-
-### Tokens on disk
+## Tokens on Disk
 
 After `connect`, OAuth tokens are stored at:
 
-- Linux / macOS: `~/.config/healthsync/tokens.json` (mode `0600`)
+- Linux / macOS: `~/.config/healthsync/tokens.json`
 - Windows: `%APPDATA%\healthsync\tokens.json`
 
-Make sure the parent directory is user-private - see the Windows caveat under Known limitations.
+Treat the token file, `.env`, and downloaded credential files as secrets.
 
-## Drive layout produced
+## What Gets Generated
 
-```
+```text
 HealthSync/
 ├── raw/YYYY/MM/YYYY-MM-DD_<type>.json
 ├── daily/YYYY/MM/YYYY-MM-DD.md
@@ -159,16 +169,16 @@ HealthSync/
 └── .state/sync-state.json
 ```
 
-- `raw/` - immutable per-type JSON archives (one file per type per day).
-- `daily/` - rendered Markdown daily note with wikilinks back to raw files and (optionally) your Obsidian journal.
-- `dashboard.html` - self-contained HTML dashboard (summary tiles + trend charts) regenerated by `healthsync dashboard`; also saved locally next to your config (e.g. `~/.config/healthsync/dashboard.html`). Every enabled metric always renders a tile and chart, even with no data in range (tile shows "—", chart shows "No data in this range").
-- `.state/sync-state.json` - last-successful-sync bookkeeping; the CLI uses this for incremental runs.
+- `raw/` — immutable per-type JSON archives
+- `daily/` — rendered markdown daily notes with links back to raw files
+- `dashboard.html` — self-contained HTML dashboard saved to Drive and locally (for example `~/.config/healthsync/dashboard.html`)
+- `.state/sync-state.json` — last-successful-sync bookkeeping used for incremental runs
 
-Point your Obsidian vault at `daily/` (or a synced local copy, e.g. via Google Drive for desktop) to browse daily notes with working wikilinks.
+Point your Obsidian vault at `daily/` or a synced local copy if you want to browse the generated notes there.
 
 ## Configuration
 
-HealthSync ships with sensible defaults. Override any of them with a JSON file at:
+HealthSync ships with defaults, but you can override them with a JSON file at:
 
 - Linux / macOS: `~/.config/healthsync/config.json`
 - Windows: `%APPDATA%\healthsync\config.json`
@@ -183,29 +193,26 @@ Example:
 }
 ```
 
-Run `config show` to see the effective merged configuration.
+Use `healthsync config show` to inspect the effective merged configuration.
 
 ## Development
 
 ```bash
-pnpm typecheck   # tsc --noEmit across the workspace
-pnpm test        # vitest across the workspace
-pnpm lint        # biome check
-pnpm format      # biome format --write
+pnpm typecheck
+pnpm test
+pnpm lint
+pnpm format
 ```
 
-End-to-end coverage lives in `packages/core/test/e2e/` and runs under `pnpm test`.
+End-to-end coverage lives in `packages/core/test/e2e/`.
 
-## Known limitations / roadmap
+## Known Limitations
 
-This is an MVP. The following are known gaps that users should be aware of:
-
-- **`--full` is currently a no-op.** The flag is accepted (and the CLI warns to stderr) but the sync orchestrator does not yet re-fetch past successful days; behaviour matches the default incremental sync. Tracked for a follow-up.
-- **`--dry-run` is currently a no-op.** Same situation: the flag is accepted and warned, but the sync still uploads. Don't rely on it to preview a run yet.
-- **Windows token file ACLs.** The `tokens.json` file is written with mode `0600` on Unix, but that bit is ignored on Windows - the file inherits NTFS ACLs from its parent directory. Ensure `%APPDATA%\healthsync` is user-private (it is by default, but worth checking if you've customised `%APPDATA%`).
-- **Google Health API is still pre-launch.** The code targets the official v4 `users/me/dataTypes/{type}/dataPoints` list endpoint and current readonly Google Health scopes, verified against official docs and mocks. Google notes that breaking changes may still occur before the end of May 2026, so a first real run may still expose small API-shape changes.
-- **Public launch timing.** See the note in *Google Cloud project setup* above - Google recommends waiting until late May 2026 before publishing an integration.
+- `--full` is currently a no-op. The flag is accepted, but the sync orchestrator does not yet re-fetch past successful days.
+- `--dry-run` is currently a no-op. The flag is accepted, but the sync still uploads.
+- On Windows, `tokens.json` inherits NTFS ACLs from the parent directory instead of enforcing Unix-style `0600`.
+- Google Health API behavior may still change as the platform stabilizes, so real-world integrations can still expose API-shape differences.
 
 ## Architecture
 
-See `docs/superpowers/specs/2026-04-19-healthsync-design.md` for the full design, and `docs/superpowers/plans/2026-04-19-healthsync-cli-mvp.md` for the implementation plan that produced this MVP.
+See `docs/superpowers/specs/2026-04-19-healthsync-design.md` for the design, and `docs/superpowers/plans/2026-04-19-healthsync-cli-mvp.md` for the original implementation plan behind the MVP.
