@@ -8,6 +8,36 @@ function day(date: string, steps?: number) {
 const GEN = "2026-07-02T00:00:00.000Z";
 
 describe("renderDashboard", () => {
+  it("renders the new dashboard layout containers for a multi-day range", () => {
+    const html = renderDashboard({
+      range: "week",
+      days: [
+        {
+          date: "2026-06-25",
+          steps: { total: 4200 },
+          calories: { total: 2100 },
+          heartRate: { average: 88 },
+          activeZoneMinutes: { total: 22 },
+          restingHeartRate: { bpm: 54 },
+        },
+        {
+          date: "2026-06-26",
+          steps: { total: 6100 },
+          calories: { total: 2250 },
+          heartRate: { average: 91 },
+          activeZoneMinutes: { total: 18 },
+          restingHeartRate: { bpm: 56 },
+        },
+      ],
+      generatedAt: GEN,
+      types: ["steps", "calories", "heart-rate", "active-zone-minutes", "resting-heart-rate"],
+    });
+    expect(html).toContain('class="dashboard-shell"');
+    expect(html).toContain('class="primary-grid"');
+    expect(html).toContain('class="secondary-grid"');
+    expect(html).toContain('class="trend-grid"');
+  });
+
   it("sums steps into a tile and renders a chart", () => {
     const html = renderDashboard({
       range: "week",
@@ -19,6 +49,7 @@ describe("renderDashboard", () => {
     expect(html).toContain("<svg");
     expect(html).not.toContain("Heart rate"); // type not enabled -> not rendered
     expect(html).toContain("2026-06-25 – 2026-06-26");
+    expect(html).toContain('class="trend-card');
   });
 
   it("always renders enabled metrics: dash tile + no-data chart placeholder", () => {
@@ -31,7 +62,7 @@ describe("renderDashboard", () => {
     expect(html).toContain("Resting heart rate");
     expect(html).toContain("—");
     expect(html).toContain("No data in this range");
-    expect(html.match(/<svg/g)).toHaveLength(1); // only steps has a real chart
+    expect(html).toContain("trend-empty");
   });
 
   it("renders a true zero as 0, not a dash", () => {
@@ -95,6 +126,6 @@ describe("renderDashboard", () => {
     expect(html).toContain("Sleep");
     expect(html).toContain("—"); // sleep has no data -> dash tile
     expect(html).not.toContain("<svg");
-    expect(html).not.toContain("No data in this range");
+    expect(html).not.toContain('class="trend-grid"');
   });
 });
