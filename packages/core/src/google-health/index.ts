@@ -22,15 +22,33 @@ const DEFAULT_BASE = "https://health.googleapis.com/v4";
 
 interface TypeQuery {
   dataType: string;
-  filter: string;
   pageSize: number;
+}
+
+interface ListTypeQuery extends TypeQuery {
+  requestKind: "list";
+  filter: string;
+}
+
+interface DailyRollupTypeQuery extends TypeQuery {
+  requestKind: "dailyRollUp";
+  range: {
+    startDate: { year: number; month: number; day: number };
+    endDate: { year: number; month: number; day: number };
+  };
+}
+
+interface DataPointsResponse {
+  dataPoints?: RawDataPoint[];
+  rollupDataPoints?: RawDataPoint[];
+  nextPageToken?: string;
 }
 
 const TYPE_QUERIES: Record<
   DataType,
   Omit<TypeQuery, "filter"> & {
     filterField: string;
-    kind: "daily" | "interval" | "sample" | "sleep";
+    kind: "daily" | "interval" | "sample" | "sleep" | "dailyRollup";
   }
 > = {
   "active-zone-minutes": {
@@ -42,7 +60,7 @@ const TYPE_QUERIES: Record<
   calories: {
     dataType: "total-calories",
     filterField: "total_calories",
-    kind: "interval",
+    kind: "dailyRollup",
     pageSize: 10000,
   },
   "heart-rate": {
@@ -109,16 +127,22 @@ export class HealthClient {
     let pageToken: string | undefined;
 
     do {
-      const url = new URL(`${this.baseUrl}/users/me/dataTypes/${query.dataType}/dataPoints`);
-      url.searchParams.set("pageSize", String(query.pageSize));
-      url.searchParams.set("filter", query.filter);
-      if (pageToken) url.searchParams.set("pageToken", pageToken);
+      const data: DataPointsResponse =
+        query.requestKind === "dailyRollUp"
+          ? await this.request<DataPointsResponse>(
+              new URL(`${this.baseUrl}/users/me/dataTypes/${query.dataType}/dataPoints:dailyRollUp`),
+              {
+                method: "POST",
+                body: JSON.stringify({
+                  range: query.range,
+                  pageSize: query.pageSize,
+                  ...(pageToken ? { pageToken } : {}),
+                }),
+              },
+            )
+          : await this.request<DataPointsResponse>(buildListUrl(this.baseUrl, query, pageToken));
 
-      const data = await this.request<{
-        dataPoints?: RawDataPoint[];
-        nextPageToken?: string;
-      }>(url);
-      points.push(...(data.dataPoints ?? []));
+      points.push(...(data.rollupDataPoints ?? data.dataPoints ?? []));
       pageToken = data.nextPageToken;
     } while (pageToken);
 
@@ -130,13 +154,20 @@ export class HealthClient {
     };
   }
 
-  private async request<T>(url: URL): Promise<T> {
+  private async request<T>(url: URL, init: RequestInit = {}): Promise<T> {
     const { token } = await this.auth.getAccessToken();
     if (!token) throw new NetworkError("no access token available");
 
     let attempt = 0;
     while (true) {
-      const res = await fetch(url, { headers: { authorization: `Bearer ${token}` } });
+      const res = await fetch(url, {
+        ...init,
+        headers: {
+          authorization: `Bearer ${token}`,
+          ...(init.body ? { "content-type": "application/json" } : {}),
+          ...(init.headers ?? {}),
+        },
+      });
       if (res.ok) return (await res.json()) as T;
 
       if (res.status === 429) {
@@ -173,7 +204,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-function buildTypeQuery(p: FetchParams): TypeQuery {
+function buildTypeQuery(p: FetchParams): ListTypeQuery | DailyRollupTypeQuery {
   const cfg = TYPE_QUERIES[p.type];
   const startDate = p.startTime.slice(0, 10);
   const endDate = p.endTime.slice(0, 10);
@@ -181,27 +212,54 @@ function buildTypeQuery(p: FetchParams): TypeQuery {
   switch (cfg.kind) {
     case "daily":
       return {
+        requestKind: "list",
         dataType: cfg.dataType,
         filter: `${cfg.filterField}.date >= "${startDate}" AND ${cfg.filterField}.date < "${endDate}"`,
         pageSize: cfg.pageSize,
       };
     case "interval":
       return {
+        requestKind: "list",
         dataType: cfg.dataType,
         filter: `${cfg.filterField}.interval.start_time >= "${p.startTime}" AND ${cfg.filterField}.interval.start_time < "${p.endTime}"`,
         pageSize: cfg.pageSize,
       };
     case "sample":
       return {
+        requestKind: "list",
         dataType: cfg.dataType,
         filter: `${cfg.filterField}.sample_time.physical_time >= "${p.startTime}" AND ${cfg.filterField}.sample_time.physical_time < "${p.endTime}"`,
         pageSize: cfg.pageSize,
       };
     case "sleep":
       return {
+        requestKind: "list",
         dataType: cfg.dataType,
         filter: `${cfg.filterField}.interval.end_time >= "${p.startTime}" AND ${cfg.filterField}.interval.end_time < "${p.endTime}"`,
         pageSize: cfg.pageSize,
       };
+    case "dailyRollup":
+      return {
+        requestKind: "dailyRollUp",
+        dataType: cfg.dataType,
+        pageSize: cfg.pageSize,
+        range: {
+          startDate: parseCivilDate(startDate),
+          endDate: parseCivilDate(endDate),
+        },
+      };
   }
+}
+
+function buildListUrl(baseUrl: string, query: ListTypeQuery, pageToken?: string): URL {
+  const url = new URL(`${baseUrl}/users/me/dataTypes/${query.dataType}/dataPoints`);
+  url.searchParams.set("pageSize", String(query.pageSize));
+  url.searchParams.set("filter", query.filter);
+  if (pageToken) url.searchParams.set("pageToken", pageToken);
+  return url;
+}
+
+function parseCivilDate(value: string): { year: number; month: number; day: number } {
+  const [year, month, day] = value.split("-").map(Number) as [number, number, number];
+  return { year, month, day };
 }
