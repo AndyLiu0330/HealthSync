@@ -39,10 +39,34 @@ const TYPE_QUERIES: Record<
     kind: "interval",
     pageSize: 10000,
   },
+  calories: {
+    dataType: "total-calories",
+    filterField: "total_calories",
+    kind: "interval",
+    pageSize: 10000,
+  },
   "heart-rate": {
     dataType: "heart-rate",
     filterField: "heart_rate",
     kind: "sample",
+    pageSize: 10000,
+  },
+  "heart-rate-variability": {
+    dataType: "daily-heart-rate-variability",
+    filterField: "daily_heart_rate_variability",
+    kind: "daily",
+    pageSize: 10000,
+  },
+  "respiratory-rate": {
+    dataType: "daily-respiratory-rate",
+    filterField: "daily_respiratory_rate",
+    kind: "daily",
+    pageSize: 10000,
+  },
+  "resting-heart-rate": {
+    dataType: "daily-resting-heart-rate",
+    filterField: "daily_resting_heart_rate",
+    kind: "daily",
     pageSize: 10000,
   },
   sleep: {

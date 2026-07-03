@@ -89,4 +89,46 @@ describe("HealthClient.fetch", () => {
       }),
     ).rejects.toThrow(/Health API/i);
   });
+
+  it("builds a daily-date filter for resting heart rate", async () => {
+    const api = nock("https://health.googleapis.com");
+    api
+      .get("/v4/users/me/dataTypes/daily-resting-heart-rate/dataPoints")
+      .query((q) => {
+        expect(q.filter).toBe(
+          'daily_resting_heart_rate.date >= "2026-07-01" AND daily_resting_heart_rate.date < "2026-07-02"',
+        );
+        return true;
+      })
+      .reply(200, { dataPoints: [{ dailyRestingHeartRate: { beatsPerMinute: "55" } }] });
+
+    const client = new HealthClient(fakeAuth());
+    const result = await client.fetch({
+      type: "resting-heart-rate",
+      startTime: "2026-07-01T00:00:00.000Z",
+      endTime: "2026-07-02T00:00:00.000Z",
+    });
+    expect(result.points).toEqual([{ dailyRestingHeartRate: { beatsPerMinute: "55" } }]);
+  });
+
+  it("builds an interval filter for calories", async () => {
+    const api = nock("https://health.googleapis.com");
+    api
+      .get("/v4/users/me/dataTypes/total-calories/dataPoints")
+      .query((q) => {
+        expect(q.filter).toBe(
+          'total_calories.interval.start_time >= "2026-07-01T00:00:00.000Z" AND total_calories.interval.start_time < "2026-07-02T00:00:00.000Z"',
+        );
+        return true;
+      })
+      .reply(200, { dataPoints: [{ totalCalories: { calories: 2100 } }] });
+
+    const client = new HealthClient(fakeAuth());
+    const result = await client.fetch({
+      type: "calories",
+      startTime: "2026-07-01T00:00:00.000Z",
+      endTime: "2026-07-02T00:00:00.000Z",
+    });
+    expect(result.points).toHaveLength(1);
+  });
 });

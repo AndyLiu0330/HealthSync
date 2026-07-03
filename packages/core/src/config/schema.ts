@@ -1,6 +1,10 @@
 export const SUPPORTED_DATA_TYPES = [
   "steps",
+  "calories",
   "heart-rate",
+  "resting-heart-rate",
+  "heart-rate-variability",
+  "respiratory-rate",
   "sleep",
   "active-zone-minutes",
   "spo2",
