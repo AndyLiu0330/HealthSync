@@ -39,6 +39,23 @@ const DAY_MS = 86_400_000;
 export async function runDashboard(p: RunDashboardParams): Promise<RunDashboardResult> {
   const dates = lastFullDays(p.now, RANGE_DAYS[p.range]);
 
+  // Dashboard backfills missing days in ascending date order, but a "missing" day can be
+  // older than a day that's already synced. If we let runSync's setType calls hit the real
+  // state port directly, backfilling an old hole after a newer day is synced would leave
+  // lastSync[type] pointing at the older timestamp. Nothing reads lastSync today, but it
+  // would plant wrong state for the next incremental sync. Guard it: only forward setType
+  // writes that move a type's timestamp forward.
+  const latestSync: Partial<Record<DataType, string>> = { ...(await p.state.get()).lastSync };
+  const guardedState: StatePort = {
+    get: () => p.state.get(),
+    setType: async (type, iso) => {
+      const current = latestSync[type];
+      if (current !== undefined && iso <= current) return;
+      latestSync[type] = iso;
+      await p.state.setType(type, iso);
+    },
+  };
+
   // One Drive folder id + listing per calendar month covered by the range.
   const monthFolders = new Map<string, string>(); // "YYYY/MM" -> folderId
   for (const date of dates) {
@@ -68,7 +85,7 @@ export async function runDashboard(p: RunDashboardParams): Promise<RunDashboardR
     const res = await runSync({
       health: p.health,
       drive: p.drive,
-      state: p.state,
+      state: guardedState,
       types: p.types,
       driveRoot: p.driveRoot,
       now: nextMidnight,
@@ -87,10 +104,16 @@ export async function runDashboard(p: RunDashboardParams): Promise<RunDashboardR
     );
     const canonical: CanonicalDay[] = [];
     for (const f of files) {
-      const body = await p.drive.downloadJSON(f.id);
-      if (isDataTypeResult(body)) canonical.push(toCanonical(body));
+      // A transient Drive error, corrupt JSON, or a malformed point must not abort the
+      // whole run — skip the bad file so the day renders as a gap instead.
+      try {
+        const body = await p.drive.downloadJSON(f.id);
+        if (isDataTypeResult(body)) canonical.push(toCanonical(body));
+      } catch {
+        // skip: missing data -> gap, never a crash
+      }
     }
-    days.push(canonical.length > 0 ? mergeCanonical(canonical) : { date });
+    days.push(canonical.length > 0 ? { ...mergeCanonical(canonical), date } : { date });
   }
 
   const html = renderDashboard({ range: p.range, days, generatedAt: p.now.toISOString() });

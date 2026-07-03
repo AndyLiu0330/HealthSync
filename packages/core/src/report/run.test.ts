@@ -172,4 +172,67 @@ describe("runDashboard", () => {
     expect(result.errors).toEqual([{ date: "2026-07-01", type: "sleep", error: "boom" }]);
     expect(result.html).toContain("Steps");
   });
+
+  it("skips a corrupt/unreadable raw file instead of aborting the run (renders as a gap)", async () => {
+    const drive = makeDrive({
+      "HealthSync/raw/2026/06": [
+        rawSteps("2026-06-25", 100),
+        rawSteps("2026-06-26", 200),
+        rawSteps("2026-06-27", 300),
+        rawSteps("2026-06-28", 400),
+        rawSteps("2026-06-29", 500),
+        rawSteps("2026-06-30", 600),
+      ],
+      "HealthSync/raw/2026/07": [rawSteps("2026-07-01", 700)],
+    });
+    const originalDownload = drive.downloadJSON.getMockImplementation();
+    drive.downloadJSON.mockImplementation(async (fileId: string) => {
+      if (fileId === "seed-3") throw new Error("corrupt JSON");
+      return originalDownload?.(fileId);
+    });
+    const result = await runDashboard({
+      health: makeHealth(0),
+      drive: drive as never,
+      state: state(),
+      types: ["steps"],
+      driveRoot: "HealthSync",
+      now: new Date("2026-07-02T10:00:00Z"),
+      range: "week",
+    });
+    expect(result.syncedDates).toEqual([]);
+    expect(result.errors).toEqual([]);
+    // the corrupt day (2026-06-27) has no dot/title in the chart...
+    expect(result.html).not.toContain("2026-06-27:");
+    // ...but its neighbors are intact.
+    expect(result.html).toContain("2026-06-26: 200");
+    expect(result.html).toContain("2026-06-28: 400");
+    expect((result.html.match(/class="chart-dot"/g) ?? []).length).toBe(6);
+  });
+
+  it("never rewinds the sync bookmark when backfilling older days", async () => {
+    const drive = makeDrive({ "HealthSync/raw/2026/07": [rawSteps("2026-07-01", 700)] });
+    const setType = vi.fn(async () => {});
+    const get = vi.fn(async () => ({ lastSync: { steps: "2026-07-02T00:00:00.000Z" } }));
+    const result = await runDashboard({
+      health: makeHealth(50),
+      drive: drive as never,
+      state: { get, setType },
+      types: ["steps"],
+      driveRoot: "HealthSync",
+      now: new Date("2026-07-02T10:00:00Z"),
+      range: "week",
+    });
+    // 2026-06-25 .. 2026-06-30 are backfilled; all their setType(iso) writes are older
+    // than (or equal to) the already-stored 2026-07-02T00:00:00.000Z bookmark, so none
+    // should reach the underlying state port.
+    expect(result.syncedDates).toEqual([
+      "2026-06-25",
+      "2026-06-26",
+      "2026-06-27",
+      "2026-06-28",
+      "2026-06-29",
+      "2026-06-30",
+    ]);
+    expect(setType).not.toHaveBeenCalled();
+  });
 });
