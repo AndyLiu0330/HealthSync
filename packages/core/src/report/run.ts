@@ -2,6 +2,7 @@ import { type DataType, SUPPORTED_DATA_TYPES } from "../config/index.js";
 import type { DataTypeResult } from "../google-health/types.js";
 import { type DrivePort, type HealthPort, type StatePort, runSync } from "../sync/index.js";
 import { type CanonicalDay, mergeCanonical, toCanonical } from "../transform/json/index.js";
+import { renderDailyNote } from "../transform/markdown/index.js";
 import { type DashboardRange, renderDashboard } from "./render.js";
 
 export interface DashboardDrivePort extends DrivePort {
@@ -92,6 +93,7 @@ export async function runDashboard(p: RunDashboardParams): Promise<RunDashboardR
       types: missingTypes,
       driveRoot: p.driveRoot,
       now: nextMidnight,
+      skipDailyNote: true,
     });
     syncedDates.push(date);
     for (const r of Object.values(res.perType)) {
@@ -117,6 +119,34 @@ export async function runDashboard(p: RunDashboardParams): Promise<RunDashboardR
       }
     }
     days.push(canonical.length > 0 ? { ...mergeCanonical(canonical), date } : { date });
+  }
+
+  // Rebuild the complete daily note for each backfilled date from the merged canonical day
+  // (old + newly-synced raw files), overwriting the single existing note instead of runSync
+  // uploading a second, partial one for the same date.
+  const dailyFolders = new Map<string, string>(); // "YYYY/MM" -> folderId
+  for (const date of syncedDates) {
+    const day = days.find((d) => d.date === date);
+    if (!day || Object.keys(day).length <= 1) continue;
+    try {
+      const ym = ymOf(date);
+      let folderId = dailyFolders.get(ym);
+      if (!folderId) {
+        const [y, m] = ym.split("/") as [string, string];
+        folderId = await p.drive.ensureFolderPath([p.driveRoot, "daily", y, m]);
+        dailyFolders.set(ym, folderId);
+      }
+      const body = renderDailyNote(day);
+      const existing = await p.drive.findChild(folderId, `${date}.md`);
+      await p.drive.uploadMarkdown({
+        parentId: folderId,
+        name: `${date}.md`,
+        body,
+        ...(existing ? { overwriteFileId: existing } : {}),
+      });
+    } catch (err) {
+      errors.push({ date, type: "daily-note", error: (err as Error).message });
+    }
   }
 
   const html = renderDashboard({

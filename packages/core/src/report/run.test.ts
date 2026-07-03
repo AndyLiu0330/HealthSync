@@ -37,14 +37,35 @@ function makeDrive(seed: Record<string, Array<{ name: string; body: unknown }>> 
       bodies.set(id, p.body);
       return id;
     }),
-    uploadMarkdown: vi.fn(async () => `md-${nextId++}`),
+    uploadMarkdown: vi.fn(
+      async (p: {
+        parentId: string;
+        name: string;
+        body: string;
+        overwriteFileId?: string;
+      }) => {
+        if (p.overwriteFileId) {
+          bodies.set(p.overwriteFileId, p.body);
+          return p.overwriteFileId;
+        }
+        const id = `md-${nextId++}`;
+        folders.get(p.parentId)?.push({ id, name: p.name });
+        bodies.set(id, p.body);
+        return id;
+      },
+    ),
     uploadHTML: vi.fn(
       async (p: { parentId: string; name: string; body: string; overwriteFileId?: string }) => {
         uploadedHTML.push(p);
         return p.overwriteFileId ?? "dash-1";
       },
     ),
-    findChild: vi.fn(async () => null),
+    findChild: vi.fn(async (parentId: string, name: string) => {
+      const entry = folders.get(parentId)?.find((f) => f.name === name);
+      return entry?.id ?? null;
+    }),
+    bodies,
+    folders,
   };
 }
 
@@ -268,5 +289,58 @@ describe("runDashboard", () => {
     expect(result.syncedDates).toEqual(["2026-07-01"]);
     expect(result.html).toContain("Resting heart rate");
     expect(result.html).toContain("500"); // steps read back from the seeded file
+  });
+
+  it("rebuilds one complete daily note instead of duplicating it when backfilling missing types", async () => {
+    const drive = makeDrive({
+      "HealthSync/raw/2026/07": [rawSteps("2026-07-01", 500)],
+      "HealthSync/daily/2026/07": [{ name: "2026-07-01.md", body: "# stale partial note" }],
+    });
+    const health = {
+      fetch: vi.fn(
+        async ({
+          type,
+          startTime,
+          endTime,
+        }: { type: string; startTime: string; endTime: string }) => ({
+          type,
+          startTime,
+          endTime,
+          points: [{ dailyRestingHeartRate: { beatsPerMinute: 55 } }],
+        }),
+      ),
+    };
+    await runDashboard({
+      health,
+      drive: drive as never,
+      state: state(),
+      types: ["steps", "resting-heart-rate"],
+      driveRoot: "HealthSync",
+      now: new Date("2026-07-02T10:00:00Z"),
+      range: "day",
+    });
+    const dailyListing = drive.folders.get("HealthSync/daily/2026/07") ?? [];
+    const noteEntries = dailyListing.filter((f) => f.name === "2026-07-01.md");
+    expect(noteEntries).toHaveLength(1);
+    expect(noteEntries[0]?.id).toBe(dailyListing[0]?.id); // same id: overwrite, not a new sibling
+    const body = drive.bodies.get(noteEntries[0]?.id ?? "") as string;
+    expect(body).toContain("Steps");
+    expect(body).toContain("Resting Heart Rate");
+  });
+
+  it("forwards a legitimate setType write to the underlying state port", async () => {
+    const drive = makeDrive();
+    const setType = vi.fn(async () => {});
+    const get = vi.fn(async () => ({ lastSync: { steps: "2026-06-01T00:00:00.000Z" } }));
+    await runDashboard({
+      health: makeHealth(10),
+      drive: drive as never,
+      state: { get, setType },
+      types: ["steps"],
+      driveRoot: "HealthSync",
+      now: new Date("2026-07-02T10:00:00Z"),
+      range: "day",
+    });
+    expect(setType).toHaveBeenCalledWith("steps", expect.any(String));
   });
 });

@@ -41,6 +41,7 @@ export interface RunSyncParams {
   now: Date;
   force?: boolean;
   since?: string; // ISO 8601; if omitted, computes the last full UTC day
+  skipDailyNote?: boolean;
 }
 
 export interface PerTypeResult {
@@ -102,7 +103,7 @@ export async function runSync(p: RunSyncParams): Promise<RunSyncResult> {
   }
 
   let dailyMarkdownFileId: string | undefined;
-  if (successfulDays.length > 0) {
+  if (!p.skipDailyNote && successfulDays.length > 0) {
     const merged = mergeCanonical(successfulDays);
     const md = renderDailyNote(merged);
     dailyMarkdownFileId = await p.drive.uploadMarkdown({
