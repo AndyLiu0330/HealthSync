@@ -235,4 +235,38 @@ describe("runDashboard", () => {
     ]);
     expect(setType).not.toHaveBeenCalled();
   });
+
+  it("backfills only the missing types for a partially-synced date", async () => {
+    const drive = makeDrive({ "HealthSync/raw/2026/07": [rawSteps("2026-07-01", 500)] });
+    const health = {
+      fetch: vi.fn(
+        async ({
+          type,
+          startTime,
+          endTime,
+        }: { type: string; startTime: string; endTime: string }) => ({
+          type,
+          startTime,
+          endTime,
+          points: [{ dailyRestingHeartRate: { beatsPerMinute: 55 } }],
+        }),
+      ),
+    };
+    const result = await runDashboard({
+      health,
+      drive: drive as never,
+      state: state(),
+      types: ["steps", "resting-heart-rate"],
+      driveRoot: "HealthSync",
+      now: new Date("2026-07-02T10:00:00Z"),
+      range: "day",
+    });
+    expect(health.fetch).toHaveBeenCalledTimes(1);
+    expect(health.fetch).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "resting-heart-rate" }),
+    );
+    expect(result.syncedDates).toEqual(["2026-07-01"]);
+    expect(result.html).toContain("Resting heart rate");
+    expect(result.html).toContain("500"); // steps read back from the seeded file
+  });
 });

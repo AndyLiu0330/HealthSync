@@ -74,19 +74,22 @@ export async function runDashboard(p: RunDashboardParams): Promise<RunDashboardR
   };
 
   let filesByMonth = await listMonths();
-  const hasRaw = (date: string) =>
-    (filesByMonth.get(ymOf(date)) ?? []).some((f) => f.name.startsWith(`${date}_`));
+  const missingTypesFor = (date: string): DataType[] => {
+    const files = filesByMonth.get(ymOf(date)) ?? [];
+    return p.types.filter((t) => !files.some((f) => f.name === `${date}_${t}.json`));
+  };
 
   const syncedDates: string[] = [];
   const errors: RunDashboardResult["errors"] = [];
   for (const date of dates) {
-    if (hasRaw(date)) continue;
+    const missingTypes = missingTypesFor(date);
+    if (missingTypes.length === 0) continue;
     const nextMidnight = new Date(Date.parse(`${date}T00:00:00.000Z`) + DAY_MS);
     const res = await runSync({
       health: p.health,
       drive: p.drive,
       state: guardedState,
-      types: p.types,
+      types: missingTypes,
       driveRoot: p.driveRoot,
       now: nextMidnight,
     });
