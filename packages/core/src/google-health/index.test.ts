@@ -117,10 +117,10 @@ describe("HealthClient.fetch", () => {
       .post("/v4/users/me/dataTypes/total-calories/dataPoints:dailyRollUp", (body) => {
         expect(body).toEqual({
           range: {
-            startDate: { year: 2026, month: 7, day: 1 },
-            endDate: { year: 2026, month: 7, day: 2 },
+            start: { date: { year: 2026, month: 7, day: 1 } },
+            end: { date: { year: 2026, month: 7, day: 2 } },
           },
-          pageSize: 10000,
+          pageSize: 1,
         });
         return true;
       })

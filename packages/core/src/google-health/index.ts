@@ -33,8 +33,8 @@ interface ListTypeQuery extends TypeQuery {
 interface DailyRollupTypeQuery extends TypeQuery {
   requestKind: "dailyRollUp";
   range: {
-    startDate: { year: number; month: number; day: number };
-    endDate: { year: number; month: number; day: number };
+    start: { date: { year: number; month: number; day: number } };
+    end: { date: { year: number; month: number; day: number } };
   };
 }
 
@@ -242,10 +242,10 @@ function buildTypeQuery(p: FetchParams): ListTypeQuery | DailyRollupTypeQuery {
       return {
         requestKind: "dailyRollUp",
         dataType: cfg.dataType,
-        pageSize: cfg.pageSize,
+        pageSize: Math.min(cfg.pageSize, civilDayCount(startDate, endDate)),
         range: {
-          startDate: parseCivilDate(startDate),
-          endDate: parseCivilDate(endDate),
+          start: { date: parseCivilDate(startDate) },
+          end: { date: parseCivilDate(endDate) },
         },
       };
   }
@@ -262,4 +262,10 @@ function buildListUrl(baseUrl: string, query: ListTypeQuery, pageToken?: string)
 function parseCivilDate(value: string): { year: number; month: number; day: number } {
   const [year, month, day] = value.split("-").map(Number) as [number, number, number];
   return { year, month, day };
+}
+
+function civilDayCount(startDate: string, endDate: string): number {
+  const start = Date.parse(`${startDate}T00:00:00.000Z`);
+  const end = Date.parse(`${endDate}T00:00:00.000Z`);
+  return Math.max(1, Math.round((end - start) / 86_400_000));
 }
