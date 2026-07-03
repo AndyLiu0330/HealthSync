@@ -63,4 +63,46 @@ describe("DriveClient", () => {
     });
     expect(id).toBe("file-1");
   });
+
+  it("downloadJSON fetches file content with alt=media and parses it", async () => {
+    const api = nock("https://www.googleapis.com");
+    api
+      .get("/drive/v3/files/file-9")
+      .query((q) => q.alt === "media")
+      .reply(200, { type: "steps", startTime: "2026-07-01T00:00:00.000Z", points: [] });
+
+    const client = new DriveClient(fakeAuth());
+    const body = (await client.downloadJSON("file-9")) as { type: string };
+    expect(body.type).toBe("steps");
+  });
+
+  it("uploadHTML writes multipart body and returns the file id", async () => {
+    const api = nock("https://www.googleapis.com");
+    api
+      .post("/upload/drive/v3/files")
+      .query((q) => q.uploadType === "multipart")
+      .reply(200, { id: "html-1", name: "dashboard.html" });
+
+    const client = new DriveClient(fakeAuth());
+    const id = await client.uploadHTML({
+      parentId: "root-id",
+      name: "dashboard.html",
+      body: "<!doctype html><html></html>",
+    });
+    expect(id).toBe("html-1");
+  });
+
+  it("uploadHTML with overwriteFileId sends update and returns the same id", async () => {
+    const api = nock("https://www.googleapis.com");
+    api.patch("/upload/drive/v3/files/html-1").query(true).reply(200, { id: "html-1" });
+
+    const client = new DriveClient(fakeAuth());
+    const id = await client.uploadHTML({
+      parentId: "root-id",
+      name: "dashboard.html",
+      body: "<!doctype html><html></html>",
+      overwriteFileId: "html-1",
+    });
+    expect(id).toBe("html-1");
+  });
 });

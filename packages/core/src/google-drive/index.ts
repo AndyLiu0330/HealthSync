@@ -17,6 +17,13 @@ export interface UploadMarkdownParams {
   overwriteFileId?: string;
 }
 
+export interface UploadHTMLParams {
+  parentId: string;
+  name: string;
+  body: string;
+  overwriteFileId?: string;
+}
+
 export class DriveClient {
   private readonly drive: drive_v3.Drive;
 
@@ -49,27 +56,30 @@ export class DriveClient {
   }
 
   async uploadJSON(p: UploadJSONParams): Promise<string> {
-    const media = { mimeType: "application/json", body: JSON.stringify(p.body, null, 2) };
-    if (p.overwriteFileId) {
-      const res = await this.drive.files.update({
-        fileId: p.overwriteFileId,
-        media,
-        fields: "id",
-      });
-      if (!res.data.id) throw new NetworkError(`Drive upload: no id for ${p.name}`);
-      return res.data.id;
-    }
-    const res = await this.drive.files.create({
-      requestBody: { name: p.name, parents: [p.parentId] },
-      media,
-      fields: "id",
+    return this.uploadFile(p, {
+      mimeType: "application/json",
+      body: JSON.stringify(p.body, null, 2),
     });
-    if (!res.data.id) throw new NetworkError(`Drive upload: no id for ${p.name}`);
-    return res.data.id;
   }
 
   async uploadMarkdown(p: UploadMarkdownParams): Promise<string> {
-    const media = { mimeType: "text/markdown", body: p.body };
+    return this.uploadFile(p, { mimeType: "text/markdown", body: p.body });
+  }
+
+  async uploadHTML(p: UploadHTMLParams): Promise<string> {
+    return this.uploadFile(p, { mimeType: "text/html", body: p.body });
+  }
+
+  async downloadJSON(fileId: string): Promise<unknown> {
+    const res = await this.drive.files.get({ fileId, alt: "media" }, { responseType: "text" });
+    const data: unknown = res.data;
+    return typeof data === "string" ? JSON.parse(data) : data;
+  }
+
+  private async uploadFile(
+    p: { parentId: string; name: string; overwriteFileId?: string },
+    media: { mimeType: string; body: string },
+  ): Promise<string> {
     if (p.overwriteFileId) {
       const res = await this.drive.files.update({
         fileId: p.overwriteFileId,

@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import { createInterface } from "node:readline/promises";
 import {
   type DataType,
@@ -8,6 +10,7 @@ import {
   auth,
   loadConfig,
   loadSyncState,
+  runDashboard,
   runSync,
   updateLastSync,
   version,
@@ -15,10 +18,11 @@ import {
 import { Command } from "commander";
 import { buildAuthCommand, buildConnectCommand } from "./commands/auth.js";
 import { buildConfigCommand } from "./commands/config.js";
+import { buildDashboardCommand } from "./commands/dashboard.js";
 import { buildListCommand } from "./commands/list.js";
 import { buildSyncCommand } from "./commands/sync.js";
 import { loadEnvFile } from "./env.js";
-import { configPath, statePath, tokensPath } from "./paths.js";
+import { configPath, dashboardPath, statePath, tokensPath } from "./paths.js";
 
 loadEnvFile();
 
@@ -156,6 +160,22 @@ async function main(): Promise<void> {
     buildSyncCommand({
       buildDeps: buildSyncDeps,
       runSync,
+      writeLine: (s) => console.log(s),
+      now: () => new Date(),
+    }),
+  );
+
+  program.addCommand(
+    buildDashboardCommand({
+      buildDeps: buildSyncDeps,
+      runDashboard,
+      saveLocal: async (html) => {
+        const p = dashboardPath();
+        await mkdir(dirname(p), { recursive: true });
+        await writeFile(p, html, "utf8");
+        return p;
+      },
+      openBrowser: (url) => openBrowser(url),
       writeLine: (s) => console.log(s),
       now: () => new Date(),
     }),
