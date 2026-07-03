@@ -22,3 +22,7 @@ export function configPath(): string {
 export function statePath(): string {
   return join(configDir(), "sync-state.json");
 }
+
+export function dashboardPath(): string {
+  return join(configDir(), "dashboard.html");
+}
