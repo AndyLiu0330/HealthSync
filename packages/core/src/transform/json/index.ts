@@ -123,6 +123,7 @@ export function toCanonical(result: DataTypeResult): CanonicalDay {
         .map((p) => {
           const tc = asObject(asObject(p)?.totalCalories);
           return (
+            numberValue(tc?.kcalSum) ??
             numberValue(tc?.calories) ??
             numberValue(tc?.kilocalories) ??
             asNumber(tc?.energy, "kilocalories")

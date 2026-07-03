@@ -111,17 +111,22 @@ describe("HealthClient.fetch", () => {
     expect(result.points).toEqual([{ dailyRestingHeartRate: { beatsPerMinute: "55" } }]);
   });
 
-  it("builds an interval filter for calories", async () => {
+  it("uses dailyRollUp for calories and normalizes rollup data points", async () => {
     const api = nock("https://health.googleapis.com");
     api
-      .get("/v4/users/me/dataTypes/total-calories/dataPoints")
-      .query((q) => {
-        expect(q.filter).toBe(
-          'total_calories.interval.start_time >= "2026-07-01T00:00:00.000Z" AND total_calories.interval.start_time < "2026-07-02T00:00:00.000Z"',
-        );
+      .post("/v4/users/me/dataTypes/total-calories/dataPoints:dailyRollUp", (body) => {
+        expect(body).toEqual({
+          range: {
+            startDate: { year: 2026, month: 7, day: 1 },
+            endDate: { year: 2026, month: 7, day: 2 },
+          },
+          pageSize: 10000,
+        });
         return true;
       })
-      .reply(200, { dataPoints: [{ totalCalories: { calories: 2100 } }] });
+      .reply(200, {
+        rollupDataPoints: [{ totalCalories: { kcalSum: 2100 } }],
+      });
 
     const client = new HealthClient(fakeAuth());
     const result = await client.fetch({
@@ -129,6 +134,6 @@ describe("HealthClient.fetch", () => {
       startTime: "2026-07-01T00:00:00.000Z",
       endTime: "2026-07-02T00:00:00.000Z",
     });
-    expect(result.points).toHaveLength(1);
+    expect(result.points).toEqual([{ totalCalories: { kcalSum: 2100 } }]);
   });
 });

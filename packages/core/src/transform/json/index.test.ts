@@ -150,6 +150,15 @@ describe("toCanonical", () => {
       expect(day.calories?.total).toBe(2100);
     });
 
+    it("parses calories daily rollups via kcalSum", () => {
+      const day = toCanonical({
+        ...base,
+        type: "calories",
+        points: [{ totalCalories: { kcalSum: 2100 } }],
+      });
+      expect(day.calories?.total).toBe(2100);
+    });
+
     it("returns bare date when a v2 type has no points", () => {
       const day = toCanonical({ ...base, type: "calories", points: [] });
       expect(day).toEqual({ date: "2026-07-01" });
