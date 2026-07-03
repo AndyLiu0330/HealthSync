@@ -2,6 +2,7 @@ import { type DataType, SUPPORTED_DATA_TYPES } from "../config/index.js";
 import type { DataTypeResult } from "../google-health/types.js";
 import { type DrivePort, type HealthPort, type StatePort, runSync } from "../sync/index.js";
 import { type CanonicalDay, mergeCanonical, toCanonical } from "../transform/json/index.js";
+import { renderDailyNote } from "../transform/markdown/index.js";
 import { type DashboardRange, renderDashboard } from "./render.js";
 
 export interface DashboardDrivePort extends DrivePort {
@@ -74,21 +75,25 @@ export async function runDashboard(p: RunDashboardParams): Promise<RunDashboardR
   };
 
   let filesByMonth = await listMonths();
-  const hasRaw = (date: string) =>
-    (filesByMonth.get(ymOf(date)) ?? []).some((f) => f.name.startsWith(`${date}_`));
+  const missingTypesFor = (date: string): DataType[] => {
+    const files = filesByMonth.get(ymOf(date)) ?? [];
+    return p.types.filter((t) => !files.some((f) => f.name === `${date}_${t}.json`));
+  };
 
   const syncedDates: string[] = [];
   const errors: RunDashboardResult["errors"] = [];
   for (const date of dates) {
-    if (hasRaw(date)) continue;
+    const missingTypes = missingTypesFor(date);
+    if (missingTypes.length === 0) continue;
     const nextMidnight = new Date(Date.parse(`${date}T00:00:00.000Z`) + DAY_MS);
     const res = await runSync({
       health: p.health,
       drive: p.drive,
       state: guardedState,
-      types: p.types,
+      types: missingTypes,
       driveRoot: p.driveRoot,
       now: nextMidnight,
+      skipDailyNote: true,
     });
     syncedDates.push(date);
     for (const r of Object.values(res.perType)) {
@@ -116,7 +121,40 @@ export async function runDashboard(p: RunDashboardParams): Promise<RunDashboardR
     days.push(canonical.length > 0 ? { ...mergeCanonical(canonical), date } : { date });
   }
 
-  const html = renderDashboard({ range: p.range, days, generatedAt: p.now.toISOString() });
+  // Rebuild the complete daily note for each backfilled date from the merged canonical day
+  // (old + newly-synced raw files), overwriting the single existing note instead of runSync
+  // uploading a second, partial one for the same date.
+  const dailyFolders = new Map<string, string>(); // "YYYY/MM" -> folderId
+  for (const date of syncedDates) {
+    const day = days.find((d) => d.date === date);
+    if (!day || Object.keys(day).length <= 1) continue;
+    try {
+      const ym = ymOf(date);
+      let folderId = dailyFolders.get(ym);
+      if (!folderId) {
+        const [y, m] = ym.split("/") as [string, string];
+        folderId = await p.drive.ensureFolderPath([p.driveRoot, "daily", y, m]);
+        dailyFolders.set(ym, folderId);
+      }
+      const body = renderDailyNote(day);
+      const existing = await p.drive.findChild(folderId, `${date}.md`);
+      await p.drive.uploadMarkdown({
+        parentId: folderId,
+        name: `${date}.md`,
+        body,
+        ...(existing ? { overwriteFileId: existing } : {}),
+      });
+    } catch (err) {
+      errors.push({ date, type: "daily-note", error: (err as Error).message });
+    }
+  }
+
+  const html = renderDashboard({
+    range: p.range,
+    days,
+    generatedAt: p.now.toISOString(),
+    types: p.types,
+  });
   const rootId = await p.drive.ensureFolderPath([p.driveRoot]);
   const existing = await p.drive.findChild(rootId, "dashboard.html");
   const driveFileId = await p.drive.uploadHTML({

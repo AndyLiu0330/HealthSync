@@ -11,6 +11,10 @@ export interface CanonicalDay {
   };
   activeZoneMinutes?: { total?: number; fatBurn?: number; cardio?: number; peak?: number };
   spo2?: { averageOvernight?: number };
+  calories?: { total?: number };
+  restingHeartRate?: { bpm?: number };
+  heartRateVariability?: { rmssdMs?: number };
+  respiratoryRate?: { breathsPerMinute?: number };
 }
 
 export function toCanonical(result: DataTypeResult): CanonicalDay {
@@ -112,6 +116,57 @@ export function toCanonical(result: DataTypeResult): CanonicalDay {
       return {
         date,
         spo2: { ...defined("averageOvernight", opt(point.averageOvernight)) },
+      };
+    }
+    case "calories": {
+      const totals = result.points
+        .map((p) => {
+          const tc = asObject(asObject(p)?.totalCalories);
+          return (
+            numberValue(tc?.calories) ??
+            numberValue(tc?.kilocalories) ??
+            asNumber(tc?.energy, "kilocalories")
+          );
+        })
+        .filter(isNumber);
+      if (totals.length > 0) {
+        return { date, calories: { total: Math.round(sum(totals)) } };
+      }
+      return { date, calories: { ...defined("total", opt(point.value)) } };
+    }
+    case "resting-heart-rate": {
+      const values = result.points
+        .map((p) => asNumber(asObject(p)?.dailyRestingHeartRate, "beatsPerMinute"))
+        .filter(isNumber);
+      if (values.length > 0) {
+        return { date, restingHeartRate: { bpm: Math.round(average(values)) } };
+      }
+      return { date, restingHeartRate: { ...defined("bpm", opt(point.beatsPerMinute)) } };
+    }
+    case "heart-rate-variability": {
+      const values = result.points
+        .map((p) =>
+          asNumber(
+            asObject(p)?.dailyHeartRateVariability,
+            "averageHeartRateVariabilityMilliseconds",
+          ),
+        )
+        .filter(isNumber);
+      if (values.length > 0) {
+        return { date, heartRateVariability: { rmssdMs: average(values) } };
+      }
+      return { date, heartRateVariability: { ...defined("rmssdMs", opt(point.rmssdMs)) } };
+    }
+    case "respiratory-rate": {
+      const values = result.points
+        .map((p) => asNumber(asObject(p)?.dailyRespiratoryRate, "breathsPerMinute"))
+        .filter(isNumber);
+      if (values.length > 0) {
+        return { date, respiratoryRate: { breathsPerMinute: average(values) } };
+      }
+      return {
+        date,
+        respiratoryRate: { ...defined("breathsPerMinute", opt(point.breathsPerMinute)) },
       };
     }
   }

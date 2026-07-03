@@ -1,13 +1,21 @@
 import type { CanonicalDay } from "../json/index.js";
 import { renderActiveZoneMinutesSection } from "./sections/active-zone-minutes.js";
+import { renderCaloriesSection } from "./sections/calories.js";
+import { renderHeartRateVariabilitySection } from "./sections/heart-rate-variability.js";
 import { renderHeartRateSection } from "./sections/heart-rate.js";
+import { renderRespiratoryRateSection } from "./sections/respiratory-rate.js";
+import { renderRestingHeartRateSection } from "./sections/resting-heart-rate.js";
 import { renderSleepSection } from "./sections/sleep.js";
 import { renderSpo2Section } from "./sections/spo2.js";
 import { renderStepsSection } from "./sections/steps.js";
 
 const ORDER = [
   { key: "steps", render: renderStepsSection },
+  { key: "calories", render: renderCaloriesSection },
   { key: "heart-rate", render: renderHeartRateSection },
+  { key: "resting-heart-rate", render: renderRestingHeartRateSection },
+  { key: "heart-rate-variability", render: renderHeartRateVariabilitySection },
+  { key: "respiratory-rate", render: renderRespiratoryRateSection },
   { key: "sleep", render: renderSleepSection },
   { key: "active-zone-minutes", render: renderActiveZoneMinutesSection },
   { key: "spo2", render: renderSpo2Section },
