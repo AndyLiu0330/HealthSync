@@ -116,7 +116,12 @@ export async function runDashboard(p: RunDashboardParams): Promise<RunDashboardR
     days.push(canonical.length > 0 ? { ...mergeCanonical(canonical), date } : { date });
   }
 
-  const html = renderDashboard({ range: p.range, days, generatedAt: p.now.toISOString() });
+  const html = renderDashboard({
+    range: p.range,
+    days,
+    generatedAt: p.now.toISOString(),
+    types: p.types,
+  });
   const rootId = await p.drive.ensureFolderPath([p.driveRoot]);
   const existing = await p.drive.findChild(rootId, "dashboard.html");
   const driveFileId = await p.drive.uploadHTML({

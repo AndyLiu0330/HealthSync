@@ -1,3 +1,4 @@
+import type { DataType } from "../config/index.js";
 import type { CanonicalDay } from "../transform/json/index.js";
 
 export type DashboardRange = "day" | "week" | "month";
@@ -6,9 +7,11 @@ export interface RenderDashboardParams {
   range: DashboardRange;
   days: CanonicalDay[]; // one entry per date in range, ascending
   generatedAt: string; // ISO 8601
+  types: DataType[]; // enabled data types — metrics for other types are not rendered
 }
 
 interface MetricSpec {
+  type: DataType;
   label: string;
   unit: string;
   agg: "sum" | "avg";
@@ -17,8 +20,24 @@ interface MetricSpec {
 }
 
 const METRICS: MetricSpec[] = [
-  { label: "Steps", unit: "", agg: "sum", decimals: 0, extract: (d) => d.steps?.total },
   {
+    type: "steps",
+    label: "Steps",
+    unit: "",
+    agg: "sum",
+    decimals: 0,
+    extract: (d) => d.steps?.total,
+  },
+  {
+    type: "calories",
+    label: "Calories",
+    unit: "kcal",
+    agg: "sum",
+    decimals: 0,
+    extract: (d) => d.calories?.total,
+  },
+  {
+    type: "heart-rate",
     label: "Heart rate",
     unit: "bpm",
     agg: "avg",
@@ -26,6 +45,31 @@ const METRICS: MetricSpec[] = [
     extract: (d) => d.heartRate?.average ?? d.heartRate?.resting,
   },
   {
+    type: "resting-heart-rate",
+    label: "Resting heart rate",
+    unit: "bpm",
+    agg: "avg",
+    decimals: 0,
+    extract: (d) => d.restingHeartRate?.bpm,
+  },
+  {
+    type: "heart-rate-variability",
+    label: "Heart rate variability",
+    unit: "ms",
+    agg: "avg",
+    decimals: 1,
+    extract: (d) => d.heartRateVariability?.rmssdMs,
+  },
+  {
+    type: "respiratory-rate",
+    label: "Respiratory rate",
+    unit: "br/min",
+    agg: "avg",
+    decimals: 1,
+    extract: (d) => d.respiratoryRate?.breathsPerMinute,
+  },
+  {
+    type: "sleep",
     label: "Sleep",
     unit: "h",
     agg: "avg",
@@ -34,13 +78,21 @@ const METRICS: MetricSpec[] = [
       d.sleep?.durationMinutes === undefined ? undefined : d.sleep.durationMinutes / 60,
   },
   {
+    type: "active-zone-minutes",
     label: "Active zone minutes",
     unit: "min",
     agg: "sum",
     decimals: 0,
     extract: (d) => d.activeZoneMinutes?.total,
   },
-  { label: "SpO2", unit: "%", agg: "avg", decimals: 1, extract: (d) => d.spo2?.averageOvernight },
+  {
+    type: "spo2",
+    label: "SpO2",
+    unit: "%",
+    agg: "avg",
+    decimals: 1,
+    extract: (d) => d.spo2?.averageOvernight,
+  },
 ];
 
 const STYLE = `
@@ -59,6 +111,7 @@ h1{font-size:1.35rem;margin:0}
 .tile .value{font-size:1.6rem;font-weight:600}
 .tile .unit{font-size:.85rem;font-weight:400;color:var(--muted);margin-left:.3rem}
 section h2{font-size:1rem;margin:1.5rem 0 .4rem}
+.no-data{color:var(--muted);font-size:.9rem;background:var(--surface-1);border:1px solid var(--border);border-radius:8px;padding:1rem;margin:0}
 svg{display:block;width:100%;height:auto;background:var(--surface-1);
 border:1px solid var(--border);border-radius:8px}
 .chart-line{fill:none;stroke:var(--series);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
@@ -74,32 +127,34 @@ export function renderDashboard(p: RenderDashboardParams): string {
 
   const tiles: string[] = [];
   const charts: string[] = [];
-  for (const m of METRICS) {
+  for (const m of METRICS.filter((metric) => p.types.includes(metric.type))) {
     const values = p.days.map((d) => m.extract(d));
     const present = values.filter((v): v is number => v !== undefined);
-    if (present.length === 0) continue;
     const total = present.reduce((a, b) => a + b, 0);
-    const value = m.agg === "sum" ? total : total / present.length;
     const suffix = m.agg === "avg" && p.range !== "day" ? " (avg)" : "";
     const unit = m.unit ? `<span class="unit">${m.unit}</span>` : "";
+    const value =
+      present.length === 0
+        ? "—"
+        : `${fmt(m.agg === "sum" ? total : total / present.length, m.decimals)}${unit}`;
     tiles.push(
-      `<div class="tile"><div class="label">${m.label}${suffix}</div><div class="value">${fmt(value, m.decimals)}${unit}</div></div>`,
+      `<div class="tile"><div class="label">${m.label}${suffix}</div><div class="value">${value}</div></div>`,
     );
     if (p.days.length > 1) {
-      const chart = lineChart(
-        values,
-        p.days.map((d) => d.date),
-        m.decimals,
-      );
       const title = m.unit ? `${m.label} (${m.unit})` : m.label;
-      charts.push(`<section><h2>${title}</h2>${chart}</section>`);
+      const body =
+        present.length === 0
+          ? `<p class="no-data">No data in this range</p>`
+          : lineChart(
+              values,
+              p.days.map((d) => d.date),
+              m.decimals,
+            );
+      charts.push(`<section><h2>${title}</h2>${body}</section>`);
     }
   }
 
-  const content =
-    tiles.length === 0
-      ? `<p class="meta">No health data found for this range.</p>`
-      : `<div class="tiles">${tiles.join("")}</div>\n${charts.join("\n")}`;
+  const content = `<div class="tiles">${tiles.join("")}</div>\n${charts.join("\n")}`;
 
   return `<!doctype html>
 <html lang="en">
